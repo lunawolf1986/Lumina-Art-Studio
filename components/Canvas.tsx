@@ -36,6 +36,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   const [lassoPoints, setLassoPoints] = useState<Point[] | null>(null);
   const [tempShape, setTempShape] = useState<Point[] | null>(null);
 
+  const [cursorPos, setCursorPos] = useState<Point | null>(null);
+
   // Ruler State
   const [ruler, setRuler] = useState<RulerState>({
     isActive: false,
@@ -53,20 +55,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   const lastPanPosRef = useRef<Point | null>(null);
   
   const brushTipCache = useRef<Map<string, HTMLCanvasElement>>(new Map());
-  const rafIdRef = useRef<number | null>(null);
-  const pendingPointsRef = useRef<Point[]>([]);
-  const layerCanvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
-  const lastHistoryIdRef = useRef<string | null>(null);
-
-  const getLayerCanvas = useCallback((layerId: string) => {
-    if (!layerCanvasesRef.current.has(layerId)) {
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      layerCanvasesRef.current.set(layerId, canvas);
-    }
-    return layerCanvasesRef.current.get(layerId)!;
-  }, [width, height]);
 
   const generateProceduralTip = (ctx: CanvasRenderingContext2D, center: number, radius: number, hardness: number, shape: string, color: string) => {
     if (shape === 'textured') {
@@ -91,10 +79,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   };
 
   const hexToRgba = (hex: string, alpha: number) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+      r = parseInt(hex[1] + hex[1], 16);
+      g = parseInt(hex[2] + hex[2], 16);
+      b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+      r = parseInt(hex.slice(1, 3), 16);
+      g = parseInt(hex.slice(3, 5), 16);
+      b = parseInt(hex.slice(5, 7), 16);
+    }
+    return `rgba(${r || 0}, ${g || 0}, ${b || 0}, ${alpha})`;
   };
 
   const getBrushTip = (color: string, size: number, hardness: number, shape: string, tipData?: string): HTMLCanvasElement => {
@@ -130,7 +125,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       } else {
         const gradient = ctx.createRadialGradient(center, center, radius * hardness, center, center, radius);
         gradient.addColorStop(0, color);
-        const rgba = color.startsWith('#') ? hexToRgba(color, 0) : color.replace('rgb', 'rgba').replace(')', ', 0)');
+        
+        let rgba = 'rgba(0,0,0,0)';
+        if (color.startsWith('#')) {
+          rgba = hexToRgba(color, 0);
+        } else if (color.startsWith('rgba')) {
+          rgba = color.replace(/[^,]+(?=\))/, ' 0');
+        } else if (color.startsWith('rgb')) {
+          rgba = color.replace('rgb', 'rgba').replace(')', ', 0)');
+        }
+        
         gradient.addColorStop(1, rgba);
         ctx.fillStyle = gradient;
         ctx.beginPath();
@@ -163,20 +167,28 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     }
   };
 
-  const interpolateQuadratic = (p0: Point, p1: Point, p2: Point, t: number): Point => {
-    const invT = 1 - t;
-    return {
-      x: invT * invT * p0.x + 2 * invT * t * p1.x + t * t * p2.x,
-      y: invT * invT * p0.y + 2 * invT * t * p1.y + t * t * p2.y,
-      pressure: (p0.pressure || 1) * invT * invT + 2 * (p1.pressure || 1) * invT * t + (p2.pressure || 1) * t * t
-    };
-  };
-
-  const renderAction = useCallback((ctx: CanvasRenderingContext2D, action: Omit<DrawingAction, 'id' | 'layerId'>) => {
+  const renderAction = useCallback((ctx: CanvasRenderingContext2D, action: Omit<DrawingAction, 'id' | 'layerId'>, isPreview: boolean = false) => {
     if (action.points.length < 1) return;
     
-    ctx.save();
-    ctx.globalCompositeOperation = action.tool === 'eraser' ? 'destination-out' : 'source-over';
+    // If it's an eraser and we're in preview, we draw it visibly
+    const effectiveTool = (isPreview && action.tool === 'eraser') ? 'brush' : action.tool;
+    const effectiveColor = (isPreview && action.tool === 'eraser') ? 'rgba(100, 150, 255, 0.3)' : action.color;
+
+    // For better eraser quality, we draw to a temporary canvas if it's not a preview
+    const useOffscreenEraser = effectiveTool === 'eraser' && !isPreview;
+    
+    let targetCtx = ctx;
+    let offscreenCanvas: HTMLCanvasElement | null = null;
+    
+    if (useOffscreenEraser) {
+      offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = ctx.canvas.width;
+      offscreenCanvas.height = ctx.canvas.height;
+      targetCtx = offscreenCanvas.getContext('2d')!;
+    }
+
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = useOffscreenEraser ? 'source-over' : (effectiveTool === 'eraser' ? 'destination-out' : 'source-over');
 
     const { 
       size, hardness, flow, shape, brushTipData, 
@@ -189,24 +201,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     } = action.settings;
 
     if (['line', 'rect', 'circle', 'measure'].includes(action.tool)) {
-      ctx.strokeStyle = action.color;
-      ctx.lineWidth = size;
-      ctx.globalAlpha = flow;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      targetCtx.strokeStyle = action.color;
+      targetCtx.lineWidth = size;
+      targetCtx.globalAlpha = flow;
+      targetCtx.lineCap = 'round';
+      targetCtx.lineJoin = 'round';
       
-      ctx.beginPath();
+      targetCtx.beginPath();
       if (action.tool === 'line' || action.tool === 'measure') {
-        ctx.moveTo(action.points[0].x, action.points[0].y);
-        ctx.lineTo(action.points[action.points.length - 1].x, action.points[action.points.length - 1].y);
+        targetCtx.moveTo(action.points[0].x, action.points[0].y);
+        targetCtx.lineTo(action.points[action.points.length - 1].x, action.points[action.points.length - 1].y);
       } else if (action.tool === 'rect') {
-        ctx.moveTo(action.points[0].x, action.points[0].y);
-        action.points.forEach(p => ctx.lineTo(p.x, p.y));
+        targetCtx.moveTo(action.points[0].x, action.points[0].y);
+        action.points.forEach(p => targetCtx.lineTo(p.x, p.y));
       } else if (action.tool === 'circle') {
-        ctx.moveTo(action.points[0].x, action.points[0].y);
-        action.points.forEach(p => ctx.lineTo(p.x, p.y));
+        targetCtx.moveTo(action.points[0].x, action.points[0].y);
+        action.points.forEach(p => targetCtx.lineTo(p.x, p.y));
       }
-      ctx.stroke();
+      targetCtx.stroke();
       
       if (action.tool === 'measure' && action.points.length >= 2) {
         const p1 = action.points[0];
@@ -216,65 +228,65 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         const dist = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx);
         
-        ctx.save();
-        ctx.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
-        ctx.rotate(angle);
-        ctx.fillStyle = action.color;
-        ctx.font = `${Math.max(12, size * 2)}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(dist)}px`, 0, -5);
-        ctx.restore();
+        targetCtx.save();
+        targetCtx.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+        targetCtx.rotate(angle);
+        targetCtx.fillStyle = action.color;
+        targetCtx.font = `${Math.max(12, size * 2)}px monospace`;
+        targetCtx.textAlign = 'center';
+        targetCtx.fillText(`${Math.round(dist)}px`, 0, -5);
+        targetCtx.restore();
       }
       
-      ctx.restore();
+      targetCtx.restore();
+      if (useOffscreenEraser && offscreenCanvas) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.drawImage(offscreenCanvas, 0, 0);
+        ctx.restore();
+      }
       return;
     }
     
     const baseSpacing = action.settings.spacing || 0.05;
     const totalPoints = action.points.length;
 
-    const drawSegment = (pA: Point, pB: Point, pC: Point | null, startIndex: number, endIndex: number) => {
-      const dx = (pC ? (pB.x + pC.x) / 2 : pB.x) - pA.x;
-      const dy = (pC ? (pB.y + pC.y) / 2 : pB.y) - pA.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+    action.points.forEach((p, i) => {
+      const progress = totalPoints > 1 ? i / (totalPoints - 1) : 0;
+      let taperSizeMult = 1.0;
+      let taperAlphaMult = 1.0;
+
+      if (progress < fadeLengthStart && fadeLengthStart > 0) {
+        const t = getFadeEase(progress / fadeLengthStart, fadeShape);
+        taperSizeMult = thicknessStart + (1.0 - thicknessStart) * t;
+        taperAlphaMult = opacityStart + (1.0 - opacityStart) * t;
+      } 
+      else if (progress > (1.0 - fadeLengthEnd) && fadeLengthEnd > 0) {
+        const normalizedEndProgress = (progress - (1.0 - fadeLengthEnd)) / fadeLengthEnd;
+        const t = getFadeEase(1.0 - normalizedEndProgress, fadeShape);
+        taperSizeMult = thicknessEnd + (1.0 - thicknessEnd) * t;
+        taperAlphaMult = opacityEnd + (1.0 - opacityEnd) * t;
+      }
+
+      let pressureValue = p.pressure ?? 1.0;
+      if (pressureValue > 0) {
+        pressureValue = Math.pow(pressureValue, 1 / pressureCurve);
+      }
+
+      const prev = action.points[i-1] || p;
+      const dx = p.x - prev.x;
+      const dy = p.y - prev.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const angle = Math.atan2(dy, dx);
+      
       const spacing = Math.max(0.5, size * baseSpacing);
       const steps = Math.ceil(dist / spacing);
-
-      for (let s = 0; s <= steps; s++) {
+      
+      for(let s = 0; s <= steps; s++) {
         const tStep = s / (steps || 1);
-        const progress = (startIndex + (endIndex - startIndex) * tStep) / (totalPoints - 1);
+        let tx = prev.x + dx * tStep;
+        let ty = prev.y + dy * tStep;
         
-        let tx, ty, tp;
-        if (pC) {
-          const mid1 = { x: (pA.x + pB.x) / 2, y: (pA.y + pB.y) / 2, pressure: ((pA.pressure || 1) + (pB.pressure || 1)) / 2 };
-          const mid2 = { x: (pB.x + pC.x) / 2, y: (pB.y + pC.y) / 2, pressure: ((pB.pressure || 1) + (pC.pressure || 1)) / 2 };
-          const p = interpolateQuadratic(mid1, pB, mid2, tStep);
-          tx = p.x; ty = p.y; tp = p.pressure;
-        } else {
-          tx = pA.x + dx * tStep;
-          ty = pA.y + dy * tStep;
-          tp = (pA.pressure || 1) + ((pB.pressure || 1) - (pA.pressure || 1)) * tStep;
-        }
-
-        let taperSizeMult = 1.0;
-        let taperAlphaMult = 1.0;
-
-        if (progress < fadeLengthStart && fadeLengthStart > 0) {
-          const t = getFadeEase(progress / fadeLengthStart, fadeShape);
-          taperSizeMult = thicknessStart + (1.0 - thicknessStart) * t;
-          taperAlphaMult = opacityStart + (1.0 - opacityStart) * t;
-        } else if (progress > (1.0 - fadeLengthEnd) && fadeLengthEnd > 0) {
-          const normalizedEndProgress = (progress - (1.0 - fadeLengthEnd)) / fadeLengthEnd;
-          const t = getFadeEase(1.0 - normalizedEndProgress, fadeShape);
-          taperSizeMult = thicknessEnd + (1.0 - thicknessEnd) * t;
-          taperAlphaMult = opacityEnd + (1.0 - opacityEnd) * t;
-        }
-
-        let pressureValue = tp || 1.0;
-        if (pressureValue > 0) {
-          pressureValue = Math.pow(pressureValue, 1 / pressureCurve);
-        }
-
         if (jitter > 0) {
           tx += (Math.random() - 0.5) * jitter * size;
           ty += (Math.random() - 0.5) * jitter * size;
@@ -286,54 +298,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         let currentFlow = Math.max(0, flow * taperAlphaMult * (pressureOpacity ? pressureValue : 1.0));
         if (opacityJitter > 0) currentFlow *= (1 - opacityJitter + Math.random() * opacityJitter);
         
-        const tip = getBrushTip(action.color, currentSize, hardness, shape, brushTipData);
+        const tip = getBrushTip(effectiveColor, currentSize, hardness, shape, brushTipData);
         
-        ctx.save();
-        ctx.globalAlpha = currentFlow;
-        ctx.translate(tx, ty);
+        targetCtx.save();
+        targetCtx.globalAlpha = currentFlow;
+        targetCtx.translate(tx, ty);
         
         let currentRotation = (rotation * Math.PI) / 180;
-        if (angleFollow) {
-          const nextT = Math.min(1, tStep + 0.01);
-          const nextP = pC ? interpolateQuadratic({ x: (pA.x + pB.x) / 2, y: (pA.y + pB.y) / 2, pressure: 1 }, pB, { x: (pB.x + pC.x) / 2, y: (pB.y + pC.y) / 2, pressure: 1 }, nextT) : { x: pA.x + dx * nextT, y: pA.y + dy * nextT };
-          currentRotation += Math.atan2(nextP.y - ty, nextP.x - tx);
-        }
+        if (angleFollow) currentRotation += angle;
         if (angleJitter > 0) currentRotation += (Math.random() - 0.5) * angleJitter * Math.PI * 2;
         
-        ctx.rotate(currentRotation);
-        ctx.drawImage(tip, -tip.width / 2, -tip.height / 2);
-        ctx.restore();
+        targetCtx.rotate(currentRotation);
+        targetCtx.drawImage(tip, -tip.width / 2, -tip.height / 2);
+        targetCtx.restore();
       }
-    };
-
-    if (totalPoints === 1) {
-      drawSegment(action.points[0], action.points[0], null, 0, 0);
-    } else {
-      for (let i = 0; i < totalPoints - 1; i++) {
-        const p0 = action.points[i - 1] || action.points[i];
-        const p1 = action.points[i];
-        const p2 = action.points[i + 1];
-        const p3 = action.points[i + 2] || p2;
-        
-        // Use quadratic interpolation if we have enough points
-        if (i > 0 && i < totalPoints - 2) {
-          drawSegment(p1, p2, p3, i, i + 1);
-        } else if (i === 0) {
-          // First segment: linear from p1 to mid(p1, p2)
-          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, pressure: ((p1.pressure || 1) + (p2.pressure || 1)) / 2 };
-          drawSegment(p1, mid, null, 0, 0.5);
-          if (totalPoints > 2) {
-             // Then quadratic will take over from mid to mid
-          } else {
-             drawSegment(mid, p2, null, 0.5, 1);
-          }
-        } else {
-          // Last segment
-          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, pressure: ((p1.pressure || 1) + (p2.pressure || 1)) / 2 };
-          drawSegment(mid, p2, null, i + 0.5, i + 1);
-        }
-      }
-    }
+    });
     
     if (action.tool === 'measure' && action.points.length >= 2) {
       const p1 = action.points[0];
@@ -343,17 +322,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       const dist = Math.sqrt(dx * dx + dy * dy);
       const angle = Math.atan2(dy, dx);
       
-      ctx.save();
-      ctx.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
-      ctx.rotate(angle);
-      ctx.fillStyle = action.color;
-      ctx.font = `${Math.max(12, size * 2)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.round(dist)}px`, 0, -5);
-      ctx.restore();
+      targetCtx.save();
+      targetCtx.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+      targetCtx.rotate(angle);
+      targetCtx.fillStyle = action.color;
+      targetCtx.font = `${Math.max(12, size * 2)}px monospace`;
+      targetCtx.textAlign = 'center';
+      targetCtx.fillText(`${Math.round(dist)}px`, 0, -5);
+      targetCtx.restore();
     }
 
-    ctx.restore();
+    targetCtx.restore();
+
+    if (useOffscreenEraser && offscreenCanvas) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(offscreenCanvas, 0, 0);
+      ctx.restore();
+    }
   }, []);
 
   const renderGrid = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -427,34 +413,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     const ctx = mainCanvas.getContext('2d');
     if (!ctx) return;
 
-    // Check if we need to re-render layer buffers
-    const lastAction = history[history.length - 1];
-    const needsFullRebuild = !lastHistoryIdRef.current || 
-                             (lastAction && lastAction.id !== lastHistoryIdRef.current && history.length <= history.findIndex(h => h.id === lastHistoryIdRef.current) + 1) ||
-                             history.length < (history.findIndex(h => h.id === lastHistoryIdRef.current) + 1);
-
-    if (needsFullRebuild || lastHistoryIdRef.current === null) {
-      layerCanvasesRef.current.forEach(c => {
-        const cCtx = c.getContext('2d');
-        cCtx?.clearRect(0, 0, c.width, c.height);
-      });
-      
-      history.forEach(action => {
-        const lCtx = getLayerCanvas(action.layerId).getContext('2d')!;
-        renderAction(lCtx, action);
-      });
-    } else if (lastAction && lastAction.id !== lastHistoryIdRef.current) {
-      // Just render the new actions
-      const lastIdx = history.findIndex(h => h.id === lastHistoryIdRef.current);
-      for (let i = lastIdx + 1; i < history.length; i++) {
-        const action = history[i];
-        const lCtx = getLayerCanvas(action.layerId).getContext('2d')!;
-        renderAction(lCtx, action);
-      }
-    }
-    
-    lastHistoryIdRef.current = lastAction?.id || null;
-
     ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
 
     const stacks: { base: Layer; clipped: Layer[] }[] = [];
@@ -468,38 +426,35 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
 
     stacks.forEach(stack => {
       if (!stack.base.isVisible) return;
-      
-      const baseCanvas = getLayerCanvas(stack.base.id);
-      
-      if (stack.clipped.length === 0) {
-        ctx.save();
-        ctx.globalAlpha = stack.base.opacity;
-        ctx.globalCompositeOperation = stack.base.blendMode;
-        ctx.drawImage(baseCanvas, 0, 0);
-        ctx.restore();
-      } else {
-        const stackCanvas = document.createElement('canvas');
-        stackCanvas.width = mainCanvas.width;
-        stackCanvas.height = mainCanvas.height;
-        const sCtx = stackCanvas.getContext('2d')!;
-        sCtx.drawImage(baseCanvas, 0, 0);
+      const stackCanvas = document.createElement('canvas');
+      stackCanvas.width = mainCanvas.width;
+      stackCanvas.height = mainCanvas.height;
+      const sCtx = stackCanvas.getContext('2d')!;
 
-        stack.clipped.forEach(clippedLayer => {
-          if (!clippedLayer.isVisible) return;
-          const clippedCanvas = getLayerCanvas(clippedLayer.id);
-          sCtx.save();
-          sCtx.globalAlpha = clippedLayer.opacity;
-          sCtx.globalCompositeOperation = 'source-atop';
-          sCtx.drawImage(clippedCanvas, 0, 0);
-          sCtx.restore();
-        });
+      const baseActions = history.filter(a => a.layerId === stack.base.id);
+      baseActions.forEach(action => renderAction(sCtx, action));
+      
+      stack.clipped.forEach(clippedLayer => {
+        if (!clippedLayer.isVisible) return;
+        const layerCanvas = document.createElement('canvas');
+        layerCanvas.width = mainCanvas.width;
+        layerCanvas.height = mainCanvas.height;
+        const lCtx = layerCanvas.getContext('2d')!;
+        const layerActions = history.filter(a => a.layerId === clippedLayer.id);
+        layerActions.forEach(action => renderAction(lCtx, action));
 
-        ctx.save();
-        ctx.globalAlpha = stack.base.opacity;
-        ctx.globalCompositeOperation = stack.base.blendMode;
-        ctx.drawImage(stackCanvas, 0, 0);
-        ctx.restore();
-      }
+        sCtx.save();
+        sCtx.globalAlpha = clippedLayer.opacity;
+        sCtx.globalCompositeOperation = 'source-atop';
+        sCtx.drawImage(layerCanvas, 0, 0);
+        sCtx.restore();
+      });
+
+      ctx.save();
+      ctx.globalAlpha = stack.base.opacity;
+      ctx.globalCompositeOperation = stack.base.blendMode;
+      ctx.drawImage(stackCanvas, 0, 0);
+      ctx.restore();
     });
 
     renderGrid(ctx);
@@ -516,7 +471,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       ctx.stroke();
       ctx.restore();
     }
-  }, [layers, history, lassoPoints, renderAction, renderGrid, getLayerCanvas]);
+  }, [layers, history, lassoPoints, renderAction, renderGrid]);
 
   const redrawPreview = useCallback(() => {
     const previewCanvas = previewCanvasRef.current;
@@ -529,7 +484,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     if (isDrawing && currentPathRef.current.length > 0) {
       if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
         const p1 = currentPathRef.current[0];
-        const p2 = lastPointRef.current!;
+        const p2 = lastPointRef.current;
+        if (!p2) return;
         ctx.save();
         
         if (tool === 'capture') {
@@ -579,39 +535,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       } else {
         // For regular brushes, we draw the current path segment
         const action = { tool, color, settings, points: currentPathRef.current };
-        renderAction(ctx, action);
+        renderAction(ctx, action, true);
       }
     }
   }, [isDrawing, tool, color, settings, renderAction]);
-
-  useEffect(() => {
-    const animate = () => {
-      if (isDrawing && !['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
-        if (pendingPointsRef.current.length > 0) {
-          const ctx = previewCanvasRef.current?.getContext('2d');
-          if (ctx) {
-            const activeLayer = layers.find(l => l.id === activeLayerId);
-            ctx.save();
-            if (activeLayer?.isAlphaLocked) ctx.globalCompositeOperation = 'source-atop';
-            
-            // Draw only the new segments
-            const pointsToDraw = [lastPointRef.current!, ...pendingPointsRef.current];
-            const action = { tool, color, settings, points: pointsToDraw };
-            renderAction(ctx, action);
-            
-            ctx.restore();
-            lastPointRef.current = pendingPointsRef.current[pendingPointsRef.current.length - 1];
-            pendingPointsRef.current = [];
-          }
-        }
-      }
-      rafIdRef.current = requestAnimationFrame(animate);
-    };
-    rafIdRef.current = requestAnimationFrame(animate);
-    return () => {
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-    };
-  }, [isDrawing, tool, color, settings, layers, activeLayerId, renderAction]);
 
   const snapToGrid = (p: Point): Point => {
     if (!gridSettings.snap || gridSettings.type === 'none') return p;
@@ -698,6 +625,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       targetPoint = snapToRuler(targetPoint);
     }
 
+    setCursorPos(targetPoint);
     setIsDrawing(true);
     currentPathRef.current = [targetPoint];
     lastPointRef.current = targetPoint;
@@ -788,11 +716,25 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     
     if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
       redrawPreview();
+      setCursorPos({ x: px, y: py });
       return;
     }
     
-    pendingPointsRef.current.push(targetPoint);
+    setCursorPos({ x: px, y: py });
+
+    const ctx = previewCanvasRef.current?.getContext('2d');
+    if (ctx && lastPointRef.current) {
+      const activeLayer = layers.find(l => l.id === activeLayerId);
+      ctx.save();
+      if (activeLayer?.isAlphaLocked) ctx.globalCompositeOperation = 'source-atop';
+      
+      const action = { tool, color, settings, points: [lastPointRef.current, targetPoint] };
+      renderAction(ctx, action, true);
+      ctx.restore();
+    }
+    
     currentPathRef.current.push(targetPoint);
+    lastPointRef.current = targetPoint;
     stabilizedPointRef.current = targetPoint;
   }, [isPanning, isDrawing, tool, color, settings, width, height, activeLayerId, layers, renderAction, ruler, redrawPreview]);
 
@@ -804,25 +746,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       setRuler(prev => ({ ...prev, isDragging: false, isRotating: false }));
     } else if (isDrawing) {
       setIsDrawing(false);
-      
-      // Final render to preview canvas to ensure all points are caught
-      if (pendingPointsRef.current.length > 0) {
-        const ctx = previewCanvasRef.current?.getContext('2d');
-        if (ctx) {
-          const activeLayer = layers.find(l => l.id === activeLayerId);
-          ctx.save();
-          if (activeLayer?.isAlphaLocked) ctx.globalCompositeOperation = 'source-atop';
-          const pointsToDraw = [lastPointRef.current!, ...pendingPointsRef.current];
-          renderAction(ctx, { tool, color, settings, points: pointsToDraw });
-          ctx.restore();
-        }
-      }
-
+      setCursorPos(null);
       if (tool === 'lasso') {
           setLassoPoints(currentPathRef.current);
-      } else if (tool === 'capture') {
+      } else if (tool === 'capture' && lastPointRef.current && currentPathRef.current.length > 0) {
           const p1 = currentPathRef.current[0];
-          const p2 = lastPointRef.current!;
+          const p2 = lastPointRef.current;
           const side = Math.max(Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
           if (side > 5 && onCapture) {
             const x = p2.x > p1.x ? p1.x : p1.x - side;
@@ -874,10 +803,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
             layerId: activeLayerId!
           });
       } else {
-          // Bake the preview canvas into the active layer buffer
-          const lCtx = getLayerCanvas(activeLayerId!).getContext('2d')!;
-          lCtx.drawImage(previewCanvasRef.current!, 0, 0);
-          
           onActionComplete({
               tool, color, settings: { ...settings },
               points: [...currentPathRef.current],
@@ -885,17 +810,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
               layerId: activeLayerId!
           });
       }
-      
-      // Clear preview canvas immediately
-      const pCtx = previewCanvasRef.current?.getContext('2d');
-      pCtx?.clearRect(0, 0, width, height);
-      
       redraw();
       stabilizedPointRef.current = null;
-      pendingPointsRef.current = [];
     }
     try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch(err) {}
-  }, [isPanning, isDrawing, tool, color, settings, activeLayerId, onActionComplete, redraw, ruler.isDragging, ruler.isRotating, layers, getLayerCanvas, width, height, onCapture]);
+  }, [isPanning, isDrawing, tool, color, settings, activeLayerId, onActionComplete, redraw, ruler.isDragging, ruler.isRotating]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -947,11 +866,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         const c = canvasRef.current;
         if (!c) return '';
         const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = width;
-        exportCanvas.height = height;
+        exportCanvas.width = Math.max(1, width);
+        exportCanvas.height = Math.max(1, height);
         const eCtx = exportCanvas.getContext('2d')!;
         eCtx.fillStyle = backgroundColor;
-        eCtx.fillRect(0, 0, width, height);
+        eCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
         eCtx.drawImage(c, 0, 0);
         return exportCanvas.toDataURL();
     },
@@ -977,6 +896,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         onPointerDown={onStart}
       >
         <div className="absolute inset-0 -z-10" style={{ backgroundColor }} />
+        
+        {/* Brush Cursor */}
+        {cursorPos && !isPanning && !isSpaceDown && (
+          <div 
+            className="absolute pointer-events-none z-[500] border border-white/30 rounded-full shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
+            style={{
+              width: settings.size,
+              height: settings.size,
+              left: cursorPos.x,
+              top: cursorPos.y,
+              transform: 'translate(-50%, -50%)',
+              backgroundColor: tool === 'eraser' ? 'rgba(255,255,255,0.1)' : 'transparent'
+            }}
+          />
+        )}
+
         <canvas 
           ref={canvasRef} 
           width={width}
