@@ -133,8 +133,34 @@ const App: React.FC = () => {
   const [accent, setAccent] = useState<AccentColor>('blue');
   const [history, setHistory] = useState<DrawingAction[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingAction[]>([]);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
   
   const canvasRef = useRef<CanvasHandle>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   useEffect(() => {
     localStorage.setItem('lumina_swatches', JSON.stringify(swatches));
@@ -353,6 +379,15 @@ const App: React.FC = () => {
           }} className="px-3 md:px-4 py-1.5 bg-[hsl(var(--h),var(--s),var(--l))] text-white rounded-md text-[9px] font-black shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
             <Download size={12} /> <span className="hidden sm:inline">Export</span>
           </button>
+
+          {isInstallable && (
+            <button 
+              onClick={handleInstallClick}
+              className="px-3 md:px-4 py-1.5 bg-emerald-600 text-white rounded-md text-[9px] font-black shadow-md hover:bg-emerald-500 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight animate-pulse"
+            >
+              <Smartphone size={12} /> <span className="hidden sm:inline">Install App</span>
+            </button>
+          )}
         </div>
       </header>
 

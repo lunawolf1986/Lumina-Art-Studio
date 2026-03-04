@@ -1,0 +1,17 @@
+{
+  "name": "Lumina Art Studio",
+  "short_name": "Lumina",
+  "description": "Professional digital art and blueprint drafting studio.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0c10",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3659/3659898.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
