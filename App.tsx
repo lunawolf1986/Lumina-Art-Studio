@@ -106,6 +106,7 @@ const App: React.FC = () => {
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [rightPanelTab, setRightPanelTab] = useState<'layers' | 'colors' | 'brush' | 'frames' | 'blueprint'>('colors');
   const [isBrushCreatorOpen, setIsBrushCreatorOpen] = useState(false);
+  const [projectName, setProjectName] = useState('My Masterpiece');
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 3035, height: 4302 });
   const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
   const [isSetupOpen, setIsSetupOpen] = useState(true);
@@ -304,9 +305,11 @@ const App: React.FC = () => {
 
   const handleSaveProject = useCallback(() => {
     const thumbnail = canvasRef.current?.getDataUrl() || '';
+    const existingProject = savedProjects.find(p => p.id === currentProjectId);
+    
     const project: SavedProject = {
       id: currentProjectId || `proj_${Date.now()}`,
-      name: currentProjectId ? savedProjects.find(p => p.id === currentProjectId)?.name || 'Untitled' : `Project ${savedProjects.length + 1}`,
+      name: existingProject ? existingProject.name : projectName || `Project ${savedProjects.length + 1}`,
       thumbnail,
       lastModified: Date.now(),
       layers,
@@ -394,14 +397,18 @@ const App: React.FC = () => {
   };
 
   const handleNewProject = () => {
-    setCanvasDimensions({ width: 3035, height: 4302 });
+    // Use the dimensions already set in the setup screen
     setCanvasBackgroundColor('#ffffff');
     const bgLayer = createNewLayer('Background');
     setLayers([bgLayer]);
     setHistory([]);
     setRedoStack([]);
     setActiveLayerId(bgLayer.id);
-    setCurrentProjectId(null);
+    
+    // Create a new project entry if we want it to show up in gallery immediately
+    // Or just set the current project name
+    const newId = `proj_${Date.now()}`;
+    setCurrentProjectId(null); // It's a new unsaved project, but we have a name ready
     setIsSetupOpen(false);
   };
 
@@ -422,14 +429,46 @@ const App: React.FC = () => {
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-6">
             {setupTab === 'new' ? (
               <>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                      <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-1">Width (px)</label>
-                      <input type="number" value={canvasDimensions.width} onChange={e => setCanvasDimensions(p => ({...p, width: parseInt(e.target.value) || 0}))} className="w-full bg-black/30 border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] font-mono font-bold outline-none focus:border-[hsl(var(--h),var(--s),var(--l))] transition-all" />
+                      <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-1">Project Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter project name..." 
+                        value={projectName} 
+                        onChange={e => setProjectName(e.target.value)} 
+                        className="w-full bg-black/30 border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] font-bold outline-none focus:border-[hsl(var(--h),var(--s),var(--l))] transition-all" 
+                      />
                   </div>
-                  <div className="flex flex-col gap-2">
-                      <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-1">Height (px)</label>
-                      <input type="number" value={canvasDimensions.height} onChange={e => setCanvasDimensions(p => ({...p, height: parseInt(e.target.value) || 0}))} className="w-full bg-black/30 border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] font-mono font-bold outline-none focus:border-[hsl(var(--h),var(--s),var(--l))] transition-all" />
+
+                  <div className="flex flex-col gap-3">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[hsl(var(--h),var(--s),var(--l))] flex items-center gap-2">
+                      <span className="w-4 h-px bg-current opacity-30" />
+                      Custom Canvas Size
+                    </span>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-1">Width (px)</label>
+                          <input type="number" value={canvasDimensions.width} onChange={e => setCanvasDimensions(p => ({...p, width: parseInt(e.target.value) || 0}))} className="w-full bg-black/30 border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] font-mono font-bold outline-none focus:border-[hsl(var(--h),var(--s),var(--l))] transition-all" />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                          <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-1">Height (px)</label>
+                          <input type="number" value={canvasDimensions.height} onChange={e => setCanvasDimensions(p => ({...p, height: parseInt(e.target.value) || 0}))} className="w-full bg-black/30 border border-[var(--color-border)] rounded-xl px-4 py-3 text-[13px] font-mono font-bold outline-none focus:border-[hsl(var(--h),var(--s),var(--l))] transition-all" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[hsl(var(--h),var(--s),var(--l))] flex items-center gap-2">
+                      <span className="w-4 h-px bg-current opacity-30" />
+                      Quick Ratios
+                    </span>
+                    <div className="grid grid-cols-4 gap-2">
+                       <button onClick={() => setCanvasDimensions({width: 1920, height: 1080})} className="py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] font-black uppercase hover:border-[hsl(var(--h),var(--s),var(--l))] transition-all">16:9</button>
+                       <button onClick={() => setCanvasDimensions({width: 1080, height: 1920})} className="py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] font-black uppercase hover:border-[hsl(var(--h),var(--s),var(--l))] transition-all">9:16</button>
+                       <button onClick={() => setCanvasDimensions({width: 2048, height: 2048})} className="py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] font-black uppercase hover:border-[hsl(var(--h),var(--s),var(--l))] transition-all">1:1</button>
+                       <button onClick={() => setCanvasDimensions({width: 2400, height: 1800})} className="py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] font-black uppercase hover:border-[hsl(var(--h),var(--s),var(--l))] transition-all">4:3</button>
+                    </div>
                   </div>
                 </div>
                 
@@ -522,9 +561,9 @@ const App: React.FC = () => {
           </button>
         </div>
         
-        <h1 className="text-[10px] md:text-[11px] font-black tracking-[0.4em] md:tracking-[0.6em] uppercase opacity-90 flex items-center gap-2">
+        <h1 className="text-[10px] md:text-[11px] font-black tracking-[0.2em] md:tracking-[0.3em] uppercase opacity-90 flex items-center gap-2 truncate max-w-[200px] md:max-w-none">
           <span className="w-1 h-1 rounded-full bg-[hsl(var(--h),var(--s),var(--l))] shadow-[0_0_8px_currentColor]" />
-          Lumina Studio
+          {currentProjectId ? savedProjects.find(p => p.id === currentProjectId)?.name : projectName}
         </h1>
 
         <div className="flex items-center gap-2">
