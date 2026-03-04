@@ -1,5 +1,5 @@
 
-export type Tool = 'pen' | 'brush' | 'eraser' | 'circle' | 'lasso' | 'pan' | 'transform' | 'adjust' | 'frame' | 'ruler' | 'line' | 'rect' | 'measure';
+export type Tool = 'pen' | 'brush' | 'eraser' | 'circle' | 'lasso' | 'pan' | 'transform' | 'adjust' | 'frame' | 'ruler' | 'line' | 'rect' | 'measure' | 'capture';
 export type SymmetryMode = 'off' | 'vertical' | 'horizontal' | 'radial';
 export type Theme = 'light' | 'dark' | 'blueprint';
 export type AccentColor = 'blue' | 'purple' | 'green' | 'orange' | 'white';
@@ -92,4 +92,18 @@ export interface DrawingAction {
   settings: BrushSettings;
   id: string;
   layerId: string;
+}
+
+export interface SavedProject {
+  id: string;
+  name: string;
+  thumbnail: string;
+  lastModified: number;
+  layers: Layer[];
+  history: DrawingAction[];
+  width: number;
+  height: number;
+  backgroundColor: string;
+  gridSettings: GridSettings;
+  activeLayerId: string | null;
 }

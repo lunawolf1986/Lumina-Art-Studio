@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Pencil, Palette as PaletteIcon, Eraser, Trash2, X, Bookmark, Plus, Lasso, Move, Hand, 
-  Filter, ChevronDown, Layers, Book, Droplets, Sparkles, Image as ImageIcon, Grid, Zap, Cloud, Brush, Feather, Wand2, Layout, Ruler, Compass
+  Filter, ChevronDown, Layers, Book, Droplets, Sparkles, Image as ImageIcon, Grid, Zap, Cloud, Brush, Feather, Wand2, Layout, Ruler, Compass, Maximize
 } from 'lucide-react';
 import { Tool, BrushSettings, BrushPreset, Point } from '../types';
 
@@ -158,6 +158,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         <ToolBtn active={currentTool === 'lasso'} onClick={() => setTool('lasso')} icon={<Lasso size={18} />} label="Lasso Selection" />
         <ToolBtn active={currentTool === 'frame'} onClick={() => setTool('frame')} icon={<Layout size={18} />} label="Comic Frames" />
         <ToolBtn active={currentTool === 'ruler'} onClick={() => setTool('ruler')} icon={<Ruler size={18} />} label="Ruler Guide" />
+        <ToolBtn active={currentTool === 'capture'} onClick={() => setTool('capture')} icon={<Maximize size={18} />} label="Capture Brush Tip" />
         <ToolBtn active={currentTool === 'line'} onClick={() => setTool('line')} icon={<Compass size={18} />} label="Line Tool" />
         <ToolBtn active={currentTool === 'eraser'} onClick={() => setTool('eraser')} icon={<Eraser size={18} />} label="Eraser" />
         <div className="h-px w-8 bg-white/5 my-0.5 md:my-1" />

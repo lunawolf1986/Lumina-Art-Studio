@@ -259,6 +259,19 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
                   {layer.isLocked ? <Lock size={9} /> : <Unlock size={9} />}
                 </button>
                 <button onClick={(e) => { e.stopPropagation(); onAlphaLockToggle(layer.id); }} className={`p-1 rounded text-[7px] font-black ${layer.isAlphaLocked ? 'text-[hsl(var(--h),var(--s),var(--l))] bg-[hsl(var(--h),var(--s),var(--l),0.1)]' : 'text-[var(--color-text-secondary)] opacity-30'}`} title="Alpha Lock">A</button>
+                <button 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    if (layers.length > 1 && window.confirm(`Delete layer "${layer.name}"?`)) {
+                      onDeleteLayer(layer.id);
+                    }
+                  }} 
+                  disabled={layers.length <= 1}
+                  className="p-1 rounded text-red-400 opacity-30 hover:opacity-100 hover:bg-red-400/10 disabled:hidden"
+                  title="Delete Layer"
+                >
+                  <Trash2 size={9} />
+                </button>
               </div>
             </div>
 
@@ -340,11 +353,18 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
 
       <div className="p-2 border-t border-[var(--color-border)] flex-shrink-0 bg-[var(--color-bg-secondary)]">
         <button 
-          onClick={() => activeLayerId && onDeleteLayer(activeLayerId)} 
+          onClick={() => {
+            if (activeLayerId) {
+              const layer = layers.find(l => l.id === activeLayerId);
+              if (layer && window.confirm(`Delete active layer "${layer.name}"?`)) {
+                onDeleteLayer(activeLayerId);
+              }
+            }
+          }} 
           disabled={layers.length <= 1} 
           className="w-full py-1 text-red-400 hover:bg-red-400/10 rounded-md text-[9px] font-bold transition-all disabled:opacity-20 flex items-center justify-center gap-1.5 border border-red-400/10"
         >
-          <Trash2 size={10} /> Delete
+          <Trash2 size={10} /> Delete Active Layer
         </button>
       </div>
     </div>

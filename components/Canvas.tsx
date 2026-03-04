@@ -14,6 +14,7 @@ interface CanvasProps {
   height: number;
   backgroundColor: string;
   gridSettings: GridSettings;
+  onCapture?: (dataUrl: string) => void;
 }
 
 export interface CanvasHandle {
@@ -22,7 +23,7 @@ export interface CanvasHandle {
   resetView: () => void;
 }
 
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, layers, activeLayerId, history, onActionComplete, width, height, backgroundColor, gridSettings }, ref) => {
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, layers, activeLayerId, history, onActionComplete, width, height, backgroundColor, gridSettings, onCapture }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -299,7 +300,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     ctx.save();
     ctx.strokeStyle = color === '#ffffff' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)';
     if (gridSettings.type === 'blueprint') {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
     }
     ctx.globalAlpha = gridSettings.opacity;
     ctx.lineWidth = 1 / zoom;
@@ -433,10 +434,25 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
     if (isDrawing && currentPathRef.current.length > 0) {
-      if (['line', 'rect', 'circle', 'measure'].includes(tool)) {
+      if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
         const p1 = currentPathRef.current[0];
         const p2 = lastPointRef.current!;
         ctx.save();
+        
+        if (tool === 'capture') {
+          ctx.strokeStyle = '#ff9d00';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          const side = Math.max(Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+          const x = p2.x > p1.x ? p1.x : p1.x - side;
+          const y = p2.y > p1.y ? p1.y : p1.y - side;
+          ctx.strokeRect(x, y, side, side);
+          ctx.fillStyle = 'rgba(255, 157, 0, 0.1)';
+          ctx.fillRect(x, y, side, side);
+          ctx.restore();
+          return;
+        }
+
         ctx.strokeStyle = color;
         ctx.lineWidth = settings.size;
         ctx.beginPath();
@@ -648,7 +664,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         targetPoint = snapToRuler(targetPoint);
     }
     
-    if (['line', 'rect', 'circle', 'measure'].includes(tool)) {
+    if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
       redrawPreview();
       return;
     }
@@ -679,6 +695,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       setIsDrawing(false);
       if (tool === 'lasso') {
           setLassoPoints(currentPathRef.current);
+      } else if (tool === 'capture') {
+          const p1 = currentPathRef.current[0];
+          const p2 = lastPointRef.current!;
+          const side = Math.max(Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
+          if (side > 5 && onCapture) {
+            const x = p2.x > p1.x ? p1.x : p1.x - side;
+            const y = p2.y > p1.y ? p1.y : p1.y - side;
+            
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = side;
+            cropCanvas.height = side;
+            const cropCtx = cropCanvas.getContext('2d');
+            
+            if (cropCtx && canvasRef.current) {
+              cropCtx.drawImage(canvasRef.current, x, y, side, side, 0, 0, side, side);
+              onCapture(cropCanvas.toDataURL());
+            }
+          }
       } else if (['line', 'rect', 'circle', 'measure'].includes(tool)) {
           const p1 = currentPathRef.current[0];
           const p2 = lastPointRef.current!;

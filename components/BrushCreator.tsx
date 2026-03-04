@@ -206,7 +206,7 @@ const BrushCreator: React.FC<BrushCreatorProps> = ({ onClose, onSave, initialSet
     fadeShape: initialSettings.fadeShape ?? 0.5,
     pressureSize: initialSettings.pressureSize ?? true,
     pressureOpacity: initialSettings.pressureOpacity ?? true,
-    pressureCurve: initialSettings.pressureCurve ?? 1.0,
+    pressureCurve: initialSettings.pressureCurve ?? 1.6,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
