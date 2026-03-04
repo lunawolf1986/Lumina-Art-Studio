@@ -1,0 +1,134 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lumina Art Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-accent-blue: 217 91% 60%;
+            --color-accent-purple: 262 82% 62%;
+            --color-accent-green: 142 71% 45%;
+            --color-accent-orange: 25 95% 53%;
+            --shadow-accent: 0 10px 15px -3px hsla(var(--h), var(--s), var(--l), 0.15), 0 4px 6px -2px hsla(var(--h), var(--s), var(--l), 0.05);
+        }
+
+        html[data-theme='dark'] {
+            --color-bg-primary: #0a0c10;
+            --color-bg-secondary: #14171d;
+            --color-bg-tertiary: #1f242d;
+            --color-panel-glass: 12 16% 8% / 0.85;
+            --color-border: #2a313c;
+            --color-text-primary: #f1f5f9;
+            --color-text-secondary: #64748b;
+        }
+
+        html[data-theme='light'] {
+            --color-bg-primary: #f8fafc;
+            --color-bg-secondary: #ffffff;
+            --color-bg-tertiary: #f1f5f9;
+            --color-panel-glass: 210 40% 98% / 0.85;
+            --color-border: #e2e8f0;
+            --color-text-primary: #0f172a;
+            --color-text-secondary: #64748b;
+        }
+
+        html[data-theme='blueprint'] {
+            --color-bg-primary: #002b55;
+            --color-bg-secondary: #003366;
+            --color-bg-tertiary: #004080;
+            --color-panel-glass: 210 100% 15% / 0.85;
+            --color-border: #0059b3;
+            --color-text-primary: #ffffff;
+            --color-text-secondary: #99ccff;
+        }
+        
+        html[data-accent='blue'] { --h: 217; --s: 91%; --l: 60%; }
+        html[data-accent='purple'] { --h: 262; --s: 82%; --l: 62%; }
+        html[data-accent='green'] { --h: 142; --s: 71%; --l: 45%; }
+        html[data-accent='orange'] { --h: 25; --s: 95%; --l: 53%; }
+        html[data-accent='white'] { --h: 0; --s: 0%; --l: 100%; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            touch-action: none;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.4);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            border: 2px solid hsl(var(--h), var(--s), var(--l));
+            margin-top: -8px;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: var(--color-bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .animate-in {
+            animation: animate-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        @keyframes animate-in {
+            from { opacity: 0; transform: translateX(-10px) scale(0.98); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
