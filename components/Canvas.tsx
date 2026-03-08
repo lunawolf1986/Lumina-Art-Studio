@@ -49,7 +49,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     x: width / 2,
     y: height / 2,
     angle: 0,
-    length: 800,
+    length: 1200,
     isDragging: false,
     isRotating: false
   });
@@ -769,8 +769,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         targetPoint = snapToRuler(targetPoint);
     }
     
-    // Multi-Stage Smoothing System
-    if (stabilizedPointRef.current) {
+    // Multi-Stage Smoothing System - Skip for shape tools
+    if (stabilizedPointRef.current && !['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
       // 1. "Rope" Smoothing (Smoothing Delay)
       // smoothingDelay is interpreted as rope radius (0 to 500)
       if (settings.smoothingDelay > 0) {
@@ -811,6 +811,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     }
     
     if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
+      lastPointRef.current = targetPoint;
       redrawPreview();
       setCursorPos({ x: px, y: py });
       return;
@@ -1148,8 +1149,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
            <div 
              className="absolute pointer-events-none z-[100]"
              style={{
-               left: ruler.x,
-               top: ruler.y,
+               left: `${(ruler.x / width) * 100}%`,
+               top: `${(ruler.y / height) * 100}%`,
                width: ruler.length,
                height: 60,
                transform: `translate(-50%, -50%) rotate(${ruler.angle}deg)`,

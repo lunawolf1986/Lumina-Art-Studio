@@ -38,20 +38,31 @@ const INITIAL_PRESETS: BrushPreset[] = [
   { id: 'anime-cell-shade', name: 'Cell Shading', category: 'Anime', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 35, hardness: 1.0, flow: 1.0, spacing: 0.01, stabilization: 0.4, pressureSize: false, pressureOpacity: false } },
   { id: 'anime-soft-air', name: 'Anime Airbrush', category: 'Anime', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 120, hardness: 0.1, flow: 0.15, spacing: 0.05, stabilization: 0.2, pressureOpacity: true, pressureSize: false, pressureCurve: 1.5 } },
   
-  // TEXTURED & NATURAL
-  { id: 'charcoal-gritty', name: 'Charcoal Stick', category: 'Sumi-e', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 25, hardness: 0.4, flow: 0.8, spacing: 0.08, shape: 'textured', jitter: 0.1, angleJitter: 0.5, stabilization: 0.3, pressureSize: true, pressureOpacity: true, pressureCurve: 1.4 } },
-  { id: 'thick-oil', name: 'Thick Oil', category: 'Thick Paint', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 40, hardness: 0.9, flow: 1.0, spacing: 0.02, shape: 'chisel', rotation: 45, angleFollow: true, stabilization: 0.5, pressureSize: true, pressureCurve: 1.3 } },
-  { id: 'sponge-texture', name: 'Sea Sponge', category: 'Watercolor', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 60, hardness: 0.5, flow: 0.4, spacing: 0.3, shape: 'textured', jitter: 0.6, sizeJitter: 0.4, opacityJitter: 0.3, angleJitter: 1.0, stabilization: 0.1 } },
-  { id: 'dry-brush', name: 'Dry Brush', category: 'Sumi-e', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 30, hardness: 0.2, flow: 0.7, spacing: 0.1, shape: 'textured', thicknessStart: 0.5, thicknessEnd: 0.1, fadeLengthEnd: 0.5, stabilization: 0.4, pressureSize: true, pressureCurve: 1.4 } },
+  // INKING & PENS
+  { id: 'tech-pen', name: 'Technical Pen', category: 'Inking', tool: 'pen', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 2, hardness: 1, flow: 1.0, stabilization: 0.9, spacing: 0.001, pressureSize: false } },
+  { id: 'fountain-pen', name: 'Fountain Pen', category: 'Inking', tool: 'pen', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 3, hardness: 1.0, flow: 1.0, stabilization: 0.85, thicknessStart: 0.2, thicknessEnd: 0.8, pressureSize: true, pressureCurve: 2.0 } },
+  { id: 'brush-pen', name: 'Brush Pen', category: 'Inking', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 12, hardness: 0.9, flow: 1.0, stabilization: 0.9, spacing: 0.01, thicknessStart: 0.1, thicknessEnd: 0.1, fadeLengthStart: 0.1, fadeLengthEnd: 0.1, pressureSize: true, pressureCurve: 1.4 } },
+  { id: 'chisel-marker', name: 'Chisel Marker', category: 'Inking', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 15, hardness: 1.0, flow: 0.9, spacing: 0.02, shape: 'chisel', rotation: -30, angleFollow: false, stabilization: 0.4, pressureSize: false } },
 
   // PENCILS
   { id: 'hb-pencil', name: 'HB Pencil', category: 'Pencils', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 4, hardness: 0.7, flow: 0.9, spacing: 0.04, jitter: 0.05, shape: 'textured', stabilization: 0.6, pressureSize: true, pressureOpacity: true, pressureCurve: 1.6 } },
   { id: 'soft-2b', name: 'Soft 2B', category: 'Pencils', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 8, hardness: 0.6, flow: 0.8, spacing: 0.05, jitter: 0.1, shape: 'textured', stabilization: 0.5, pressureSize: true, pressureCurve: 1.6 } },
-  
-  // PENS
-  { id: 'tech-pen', name: 'Technical Pen', category: 'Pens', tool: 'pen', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 2, hardness: 1, flow: 1.0, stabilization: 0.9, spacing: 0.001, pressureSize: false } },
-  { id: 'chisel-marker', name: 'Chisel Marker', category: 'Pens', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 15, hardness: 1.0, flow: 0.9, spacing: 0.02, shape: 'chisel', rotation: -30, angleFollow: false, stabilization: 0.4, pressureSize: false } },
-  
+  { id: 'charcoal-gritty', name: 'Charcoal Stick', category: 'Pencils', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 25, hardness: 0.4, flow: 0.8, spacing: 0.08, shape: 'textured', jitter: 0.1, angleJitter: 0.5, stabilization: 0.3, pressureSize: true, pressureOpacity: true, pressureCurve: 1.4 } },
+
+  // PAINT & TEXTURE
+  { id: 'thick-oil', name: 'Thick Oil', category: 'Paint', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 40, hardness: 0.9, flow: 1.0, spacing: 0.02, shape: 'chisel', rotation: 45, angleFollow: true, stabilization: 0.5, pressureSize: true, pressureCurve: 1.3 } },
+  { id: 'dry-brush', name: 'Dry Brush', category: 'Paint', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 30, hardness: 0.2, flow: 0.7, spacing: 0.1, shape: 'textured', thicknessStart: 0.5, thicknessEnd: 0.1, fadeLengthEnd: 0.5, stabilization: 0.4, pressureSize: true, pressureCurve: 1.4 } },
+  { id: 'sponge-texture', name: 'Sea Sponge', category: 'Paint', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 60, hardness: 0.5, flow: 0.4, spacing: 0.3, shape: 'textured', jitter: 0.6, sizeJitter: 0.4, opacityJitter: 0.3, angleJitter: 1.0, stabilization: 0.1 } },
+
+  // WATERCOLOR
+  { id: 'watercolor-wash', name: 'Wet Wash', category: 'Watercolor', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 150, hardness: 0.05, flow: 0.1, spacing: 0.1, stabilization: 0.3, pressureOpacity: true, pressureSize: false } },
+  { id: 'watercolor-bleed', name: 'Edge Bleed', category: 'Watercolor', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 40, hardness: 0.3, flow: 0.4, spacing: 0.05, shape: 'textured', jitter: 0.05, stabilization: 0.4, pressureOpacity: true } },
+
+  // EFFECTS & NATURE
+  { id: 'effect-stars', name: 'Star Dust', category: 'Effects', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 15, hardness: 0.8, flow: 0.9, spacing: 0.8, shape: 'textured', jitter: 1.0, sizeJitter: 0.8, opacityJitter: 0.5, stabilization: 0 } },
+  { id: 'effect-clouds', name: 'Cloud Puff', category: 'Effects', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 100, hardness: 0.1, flow: 0.2, spacing: 0.2, shape: 'round', jitter: 0.3, sizeJitter: 0.5, opacityJitter: 0.3, stabilization: 0.2 } },
+  { id: 'effect-grass', name: 'Grass Blade', category: 'Effects', tool: 'brush', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 20, hardness: 0.9, flow: 1.0, spacing: 0.05, shape: 'chisel', rotation: 90, angleFollow: true, jitter: 0.1, sizeJitter: 0.3, stabilization: 0.5 } },
+
   // BLUEPRINT TOOLS
   { id: 'blueprint-line', name: 'Drafting Line', category: 'Blueprint', tool: 'line', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 1, hardness: 1.0, flow: 1.0, stabilization: 1.0, pressureSize: false, pressureOpacity: false } },
   { id: 'blueprint-heavy', name: 'Heavy Border', category: 'Blueprint', tool: 'line', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 3, hardness: 1.0, flow: 1.0, stabilization: 1.0, pressureSize: false, pressureOpacity: false } },

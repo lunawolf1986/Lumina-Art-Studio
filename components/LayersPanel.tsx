@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Layer, BlendMode, DrawingAction, Point } from '../types';
-import { Layers, Plus, Trash2, Eye, EyeOff, Lock, Unlock, Link, CornerRightDown, Monitor, Palette, ShieldCheck, Square } from 'lucide-react';
+import { Layers, Plus, Trash2, Eye, EyeOff, Lock, Unlock, Link, CornerRightDown, Monitor, Palette, ShieldCheck, Square, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface LayersPanelProps {
   layers: Layer[];
@@ -173,7 +173,7 @@ const LayerThumbnail: React.FC<{
 };
 
 const LayersPanel: React.FC<LayersPanelProps> = ({
-  layers, activeLayerId, history, canvasWidth, canvasHeight, onSelectLayer, onAddLayer, onDeleteLayer, onToggleVisibility, onToggleLock, onRenameLayer, onOpacityChange, onBlendChange, onAlphaLockToggle, onClippingToggle, onMergeDown, backgroundColor, onBackgroundColorChange
+  layers, activeLayerId, history, canvasWidth, canvasHeight, onSelectLayer, onAddLayer, onDeleteLayer, onToggleVisibility, onToggleLock, onRenameLayer, onReorderLayer, onOpacityChange, onBlendChange, onAlphaLockToggle, onClippingToggle, onMergeDown, backgroundColor, onBackgroundColorChange
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
@@ -248,6 +248,24 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
               </div>
 
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex flex-col gap-0.5 mr-1">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onReorderLayer(layer.id, 'up'); }}
+                    disabled={index === 0}
+                    className="p-0.5 hover:bg-black/10 rounded disabled:opacity-10"
+                    title="Move Up"
+                  >
+                    <ChevronUp size={8} />
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onReorderLayer(layer.id, 'down'); }}
+                    disabled={index === displayLayers.length - 1}
+                    className="p-0.5 hover:bg-black/10 rounded disabled:opacity-10"
+                    title="Move Down"
+                  >
+                    <ChevronDown size={8} />
+                  </button>
+                </div>
                 <button 
                   onClick={(e) => { e.stopPropagation(); onClippingToggle(layer.id); }} 
                   className={`p-1 rounded transition-all ${layer.isClippingMask ? 'text-[hsl(var(--h),var(--s),var(--l))] bg-[hsl(var(--h),var(--s),var(--l),0.1)]' : 'text-[var(--color-text-secondary)] opacity-30'}`} 
