@@ -707,6 +707,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     const px = ((clientX - rect.left) / rect.width) * width;
     const py = ((clientY - rect.top) / rect.height) * height;
 
+    // Update cursor position for preview
+    setCursorPos({ x: px, y: py });
+
     if (transformDrag) {
       const dx = px - transformDrag.startX;
       const dy = py - transformDrag.startY;
@@ -841,7 +844,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       setRuler(prev => ({ ...prev, isDragging: false, isRotating: false }));
     } else if (isDrawing) {
       setIsDrawing(false);
-      setCursorPos(null);
       if (tool === 'lasso') {
           setLassoPoints(currentPathRef.current);
       } else if (tool === 'capture' && lastPointRef.current && currentPathRef.current.length > 0) {
@@ -1020,12 +1022,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
 
   useEffect(() => { redraw(); redrawPreview(); }, [redraw, redrawPreview, width, height]);
 
+  const onPointerLeave = () => {
+    setCursorPos(null);
+  };
+
   const cursorClass = (tool === 'pan' || isSpaceDown) 
     ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') 
     : 'cursor-crosshair';
 
   return (
-    <div ref={containerRef} className="flex-1 w-full h-full overflow-hidden flex items-center justify-center bg-[#0d0f14]">
+    <div 
+      ref={containerRef} 
+      className="flex-1 w-full h-full overflow-hidden flex items-center justify-center bg-[#0d0f14]"
+      onPointerMove={(e) => !isDrawing && !isPanning && onMove(e.nativeEvent)}
+      onPointerLeave={onPointerLeave}
+    >
       <div 
         className={`relative shadow-[0_40px_100px_rgba(0,0,0,0.8)] border-[1px] border-white/5 transition-opacity duration-300 ${cursorClass}`}
         style={{
@@ -1040,10 +1051,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         {/* Brush Cursor HUD */}
         {cursorPos && !isPanning && !isSpaceDown && (
           <div 
-            className="absolute pointer-events-none z-[500] flex flex-col items-center gap-2"
+            className="absolute pointer-events-none z-[500]"
             style={{
-              left: cursorPos.x,
-              top: cursorPos.y,
+              left: `${(cursorPos.x / width) * 100}%`,
+              top: `${(cursorPos.y / height) * 100}%`,
               transform: 'translate(-50%, -50%)',
             }}
           >
@@ -1056,10 +1067,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
               }}
             >
               <div className="w-1 h-1 bg-white rounded-full" />
-            </div>
-            {/* HUD Tooltip */}
-            <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[8px] font-black text-white uppercase tracking-widest whitespace-nowrap shadow-xl">
-              Size: {Math.round(settings.size)}px (Hardness: {Math.round(settings.hardness * 100)}%)
             </div>
           </div>
         )}
