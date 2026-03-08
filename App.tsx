@@ -12,6 +12,7 @@ import {
   Settings2, Upload, Circle, Maximize, Square, Image as ImageIcon, 
   RotateCcw, Zap, Book, BookOpen, FileText, Smartphone, Layout, Tv, Twitter, Youtube, Printer,
   Sparkles, PenTool, Smartphone as PhoneIcon, Instagram, Languages, Columns, Rows, Tally4, Grid3X3,
+  Share2, Check,
   // Added missing Wind icon import
   Wind,
   MousePointer2, Ruler as RulerIcon, Box, Type, Hash, Compass
@@ -146,6 +147,7 @@ const App: React.FC = () => {
   });
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isShared, setIsShared] = useState(false);
   const [transformState, setTransformState] = useState<TransformState>({
     isActive: false,
     layerId: null,
@@ -349,6 +351,17 @@ const App: React.FC = () => {
     setCanvasBackgroundColor('#003366');
     setColor('#ffffff');
     setGridSettings(prev => ({ ...prev, type: 'blueprint', opacity: 0.3, snap: true }));
+  };
+
+  const handleShare = async () => {
+    const sharedUrl = 'https://ais-pre-w3aj3o4evuueezwm63zqzf-30259269233.us-east1.run.app';
+    try {
+      await navigator.clipboard.writeText(sharedUrl);
+      setIsShared(true);
+      setTimeout(() => setIsShared(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
   };
 
   const handleSaveProject = useCallback(() => {
@@ -628,6 +641,14 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <button 
+            onClick={handleShare} 
+            className={`px-3 md:px-4 py-1.5 rounded-md text-[9px] font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight ${isShared ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white hover:bg-white/10'}`}
+          >
+            {isShared ? <Check size={12} /> : <Share2 size={12} />}
+            <span className="hidden sm:inline">{isShared ? 'Copied!' : 'Share App'}</span>
+          </button>
+
           <button onClick={handleSaveProject} className="px-3 md:px-4 py-1.5 bg-white/5 text-white rounded-md text-[9px] font-black shadow-md hover:bg-white/10 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
             <FileText size={12} /> <span className="hidden sm:inline">Save Project</span>
           </button>
