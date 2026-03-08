@@ -6,7 +6,7 @@ export type AccentColor = 'blue' | 'purple' | 'green' | 'orange' | 'white';
 export type ColorProfile = 'sRGB' | 'AdobeRGB' | 'DisplayP3';
 export type BlendMode = 'source-over' | 'multiply' | 'screen' | 'overlay' | 'lighter';
 
-export type GridType = 'none' | 'square' | 'isometric' | 'blueprint';
+export type GridType = 'none' | 'square' | 'isometric' | 'blueprint' | 'dot';
 
 export interface GridSettings {
   type: GridType;
@@ -83,6 +83,18 @@ export interface Layer {
   isAlphaLocked: boolean;
   isClippingMask: boolean;
   isLocked: boolean;
+}
+
+export interface TransformState {
+  isActive: boolean;
+  layerId: string | null;
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number; // in degrees
+  width: number;
+  height: number;
 }
 
 export interface DrawingAction {

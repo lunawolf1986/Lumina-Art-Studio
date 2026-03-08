@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar';
 import LayersPanel from './components/LayersPanel';
 import ColorPanel from './components/ColorPanel';
 import BrushCreator from './components/BrushCreator';
+import ExportModal from './components/ExportModal';
 import { 
   Undo as UndoIcon, Redo as RedoIcon, Scissors, ChevronRight, ChevronLeft, 
   Download, Monitor, Layers as LayersIcon, Palette as PaletteIcon, 
@@ -15,7 +16,7 @@ import {
   Wind,
   MousePointer2, Ruler as RulerIcon, Box, Type, Hash, Compass
 } from 'lucide-react';
-import { Tool, DrawingAction, BrushSettings, Layer, Theme, AccentColor, BrushPreset, Point, GridSettings, SavedProject } from './types';
+import { Tool, DrawingAction, BrushSettings, Layer, Theme, AccentColor, BrushPreset, Point, GridSettings, SavedProject, TransformState } from './types';
 
 const STUDIO_PALETTE = ["#000000", "#FFFFFF", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF"];
 
@@ -75,6 +76,10 @@ const CANVAS_PRESETS = [
     { name: 'TikTok / Reel / Story', width: 1080, height: 1920, icon: PhoneIcon, desc: '9:16 Vertical video ratio' },
     { name: 'Standard Square (1:1)', width: 2048, height: 2048, icon: Square, desc: 'Profile icons & Avatars' },
   ]},
+  { group: 'Specialty Paper', presets: [
+    { name: 'Isometric Grid Paper', width: 3000, height: 3000, icon: Grid3X3, desc: '30-degree isometric layout' },
+    { name: 'Dot Grid Paper', width: 2400, height: 2400, icon: Hash, desc: 'Bullet journal style dot grid' },
+  ]},
   { group: 'Professional Print', presets: [
     { name: 'A3 Poster (300dpi)', width: 3508, height: 4961, icon: Printer, desc: 'High-res large format print' },
     { name: 'US Letter', width: 2550, height: 3300, icon: FileText, desc: 'Standard 8.5" x 11"' },
@@ -106,7 +111,7 @@ const App: React.FC = () => {
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [rightPanelTab, setRightPanelTab] = useState<'layers' | 'colors' | 'brush' | 'frames' | 'blueprint'>('colors');
   const [isBrushCreatorOpen, setIsBrushCreatorOpen] = useState(false);
-  const [projectName, setProjectName] = useState('My Masterpiece');
+  const [projectName, setProjectName] = useState('Untitled Artwork');
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 3035, height: 4302 });
   const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
   const [isSetupOpen, setIsSetupOpen] = useState(true);
@@ -140,6 +145,18 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [transformState, setTransformState] = useState<TransformState>({
+    isActive: false,
+    layerId: null,
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+    rotation: 0,
+    width: 0,
+    height: 0
+  });
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   
@@ -194,25 +211,56 @@ const App: React.FC = () => {
     if (!activeLayerId && layers.length > 0) setActiveLayerId(layers[layers.length - 1].id);
   }, [layers, activeLayerId]);
 
-  const handleActionComplete = useCallback((action: DrawingAction) => {
-    setHistory(prev => [...prev, action]);
-    setRedoStack([]);
-  }, []);
-
   const handleUndo = useCallback(() => {
+    if (transformState.isActive) {
+      setTransformState(prev => ({ ...prev, isActive: false }));
+      return;
+    }
     if (history.length === 0) return;
-    const last = history[history.length - 1];
+    const lastAction = history[history.length - 1];
+    setRedoStack(prev => [lastAction, ...prev]);
     setHistory(prev => prev.slice(0, -1));
-    setRedoStack(prev => [last, ...prev]);
-  }, [history]);
+  }, [history, transformState.isActive]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
-    const next = redoStack[0];
+    const nextAction = redoStack[0];
+    setHistory(prev => [...prev, nextAction]);
     setRedoStack(prev => prev.slice(1));
-    setHistory(prev => [...prev, next]);
   }, [redoStack]);
 
+  const handleActionComplete = useCallback((action: DrawingAction) => {
+    setHistory(prev => {
+      const newHistory = [...prev, action];
+      if (newHistory.length > 30) return newHistory.slice(1);
+      return newHistory;
+    });
+    setRedoStack([]);
+  }, []);
+
+  const handleToolChange = (newTool: Tool) => {
+    if (newTool === 'transform') {
+      if (activeLayerId) {
+        setTransformState({
+          isActive: true,
+          layerId: activeLayerId,
+          x: canvasDimensions.width / 2,
+          y: canvasDimensions.height / 2,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          width: canvasDimensions.width,
+          height: canvasDimensions.height
+        });
+      } else {
+        alert('Please select a layer to transform.');
+        return;
+      }
+    } else if (transformState.isActive) {
+      canvasRef.current?.commitTransform();
+    }
+    setTool(newTool);
+  };
   const handleMergeDown = () => {
     const idx = layers.findIndex(l => l.id === activeLayerId);
     if (idx <= 0) return;
@@ -309,7 +357,7 @@ const App: React.FC = () => {
     
     const project: SavedProject = {
       id: currentProjectId || `proj_${Date.now()}`,
-      name: existingProject ? existingProject.name : projectName || `Project ${savedProjects.length + 1}`,
+      name: projectName,
       thumbnail,
       lastModified: Date.now(),
       layers,
@@ -351,6 +399,12 @@ const App: React.FC = () => {
         handleSaveProject();
       }
 
+      // Transform
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyT') {
+        e.preventDefault();
+        handleToolChange('transform');
+      }
+
       // Tool switching (only if not in input)
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
@@ -383,6 +437,7 @@ const App: React.FC = () => {
     setHistory(project.history);
     setGridSettings(project.gridSettings);
     setActiveLayerId(project.activeLayerId);
+    setProjectName(project.name);
     setCurrentProjectId(project.id);
     setRedoStack([]);
     setIsSetupOpen(false);
@@ -404,6 +459,7 @@ const App: React.FC = () => {
     setHistory([]);
     setRedoStack([]);
     setActiveLayerId(bgLayer.id);
+    setProjectName('Untitled Artwork');
     
     // Create a new project entry if we want it to show up in gallery immediately
     // Or just set the current project name
@@ -561,10 +617,15 @@ const App: React.FC = () => {
           </button>
         </div>
         
-        <h1 className="text-[10px] md:text-[11px] font-black tracking-[0.2em] md:tracking-[0.3em] uppercase opacity-90 flex items-center gap-2 truncate max-w-[200px] md:max-w-none">
+        <div className="flex items-center gap-2 group">
           <span className="w-1 h-1 rounded-full bg-[hsl(var(--h),var(--s),var(--l))] shadow-[0_0_8px_currentColor]" />
-          {currentProjectId ? savedProjects.find(p => p.id === currentProjectId)?.name : projectName}
-        </h1>
+          <input 
+            type="text" 
+            value={projectName} 
+            onChange={(e) => setProjectName(e.target.value)}
+            className="bg-transparent border-none text-[10px] md:text-[11px] font-black tracking-[0.2em] md:tracking-[0.3em] uppercase opacity-90 focus:outline-none focus:opacity-100 hover:opacity-100 transition-opacity w-32 md:w-auto"
+          />
+        </div>
 
         <div className="flex items-center gap-2">
           <button onClick={handleSaveProject} className="px-3 md:px-4 py-1.5 bg-white/5 text-white rounded-md text-[9px] font-black shadow-md hover:bg-white/10 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
@@ -575,12 +636,7 @@ const App: React.FC = () => {
             <RotateCcw size={12} /> <span className="hidden sm:inline">Studio Setup</span>
           </button>
 
-          <button onClick={() => {
-            const link = document.createElement('a');
-            link.download = 'lumina_artwork.png';
-            link.href = canvasRef.current?.getDataUrl() || '';
-            link.click();
-          }} className="px-3 md:px-4 py-1.5 bg-[hsl(var(--h),var(--s),var(--l))] text-white rounded-md text-[9px] font-black shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
+          <button onClick={() => setIsExportModalOpen(true)} className="px-3 md:px-4 py-1.5 bg-[hsl(var(--h),var(--s),var(--l))] text-white rounded-md text-[9px] font-black shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
             <Download size={12} /> <span className="hidden sm:inline">Export</span>
           </button>
 
@@ -598,14 +654,14 @@ const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <aside className="w-10 md:w-12 h-full bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] flex flex-col items-center relative z-[150] shadow-2xl flex-shrink-0">
           <Toolbar 
-            currentTool={tool} setTool={setTool}
+            currentTool={tool} setTool={handleToolChange}
             color={color} setColor={setColor}
             swatches={swatches} setSwatches={setSwatches}
             settings={brushSettings} setSettings={setBrushSettings}
             onClear={() => { if(activeLayerId && confirm('Clear active layer?')) setHistory(h => h.filter(a => a.layerId !== activeLayerId)) }}
             onToggleLayers={() => setShowRightPanel(s => !s)}
             presets={allPresets}
-            onApplyPreset={(p) => { setTool(p.tool); setBrushSettings(p.settings); }}
+            onApplyPreset={(p) => { handleToolChange(p.tool); setBrushSettings(p.settings); }}
             onOpenCreator={() => setIsBrushCreatorOpen(true)}
           />
         </aside>
@@ -629,6 +685,8 @@ const App: React.FC = () => {
               height={canvasDimensions.height}
               backgroundColor={canvasBackgroundColor}
               gridSettings={gridSettings}
+              transformState={transformState}
+              onTransformChange={setTransformState}
           />
 
           {!showRightPanel && (
@@ -858,6 +916,18 @@ const App: React.FC = () => {
           onSave={handleSaveBrush} 
           initialSettings={brushSettings} 
           accentColor={accent}
+        />
+      )}
+
+      {isExportModalOpen && (
+        <ExportModal 
+          onClose={() => setIsExportModalOpen(false)}
+          canvasRef={canvasRef}
+          layers={layers}
+          width={canvasDimensions.width}
+          height={canvasDimensions.height}
+          backgroundColor={canvasBackgroundColor}
+          projectName={projectName}
         />
       )}
     </main>

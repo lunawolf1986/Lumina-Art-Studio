@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
-import { Tool, Point, DrawingAction, BrushSettings, Layer, RulerState, GridSettings } from '../types';
+import { Tool, Point, DrawingAction, BrushSettings, Layer, RulerState, GridSettings, TransformState } from '../types';
 
 interface CanvasProps {
   tool: Tool;
@@ -15,15 +15,19 @@ interface CanvasProps {
   backgroundColor: string;
   gridSettings: GridSettings;
   onCapture?: (dataUrl: string) => void;
+  transformState: TransformState;
+  onTransformChange: (state: TransformState) => void;
 }
 
 export interface CanvasHandle {
   getDataUrl: () => string;
   clearSelection: () => void;
   resetView: () => void;
+  commitTransform: () => void;
+  getLayersData: () => Promise<{ name: string; url: string }[]>;
 }
 
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, layers, activeLayerId, history, onActionComplete, width, height, backgroundColor, gridSettings, onCapture }, ref) => {
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, layers, activeLayerId, history, onActionComplete, width, height, backgroundColor, gridSettings, onCapture, transformState, onTransformChange }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,6 +35,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   const [isDrawing, setIsDrawing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [isSpaceDown, setIsSpaceDown] = useState(false);
+  const [transformDrag, setTransformDrag] = useState<{ type: string; startX: number; startY: number; startState: TransformState } | null>(null);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [lassoPoints, setLassoPoints] = useState<Point[] | null>(null);
@@ -53,6 +58,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   const lastPointRef = useRef<Point | null>(null);
   const stabilizedPointRef = useRef<Point | null>(null);
   const lastPanPosRef = useRef<Point | null>(null);
+  const layerCanvases = useRef<Map<string, HTMLCanvasElement>>(new Map());
   
   const brushTipCache = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
@@ -170,12 +176,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   const renderAction = useCallback((ctx: CanvasRenderingContext2D, action: Omit<DrawingAction, 'id' | 'layerId'>, isPreview: boolean = false) => {
     if (action.points.length < 1) return;
     
-    // If it's an eraser and we're in preview, we draw it visibly
-    const effectiveTool = (isPreview && action.tool === 'eraser') ? 'brush' : action.tool;
-    const effectiveColor = (isPreview && action.tool === 'eraser') ? 'rgba(100, 150, 255, 0.3)' : action.color;
-
+    const isEraser = action.tool === 'eraser';
+    
     // For better eraser quality, we draw to a temporary canvas if it's not a preview
-    const useOffscreenEraser = effectiveTool === 'eraser' && !isPreview;
+    const useOffscreenEraser = isEraser && !isPreview;
     
     let targetCtx = ctx;
     let offscreenCanvas: HTMLCanvasElement | null = null;
@@ -188,7 +192,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     }
 
     targetCtx.save();
-    targetCtx.globalCompositeOperation = useOffscreenEraser ? 'source-over' : (effectiveTool === 'eraser' ? 'destination-out' : 'source-over');
+    
+    const effectiveColor = isEraser ? '#ffffff' : action.color;
+
+    if (isPreview && isEraser) {
+      // For eraser preview, we want to show what will be erased
+      // We'll use a semi-transparent blue but also destination-out if we want a real cutout
+      // But for preview canvas, we don't have the layer content yet.
+      // Let's stick to the blue overlay for now but make it more "cutout-like" if possible.
+      targetCtx.globalCompositeOperation = 'source-over';
+      targetCtx.fillStyle = 'rgba(100, 150, 255, 0.3)';
+    } else {
+      targetCtx.globalCompositeOperation = useOffscreenEraser ? 'source-over' : (isEraser ? 'destination-out' : 'source-over');
+    }
 
     const { 
       size, hardness, flow, shape, brushTipData, 
@@ -402,6 +418,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         ctx.lineTo(x, height);
       }
       ctx.stroke();
+    } else if (gridSettings.type === 'dot') {
+      ctx.fillStyle = gridSettings.opacity > 0.5 ? 'rgba(255,255,255,0.5)' : `rgba(255,255,255,${gridSettings.opacity})`;
+      if (backgroundColor === '#ffffff' || backgroundColor === 'white') {
+        ctx.fillStyle = `rgba(0,0,0,${gridSettings.opacity})`;
+      }
+      for (let x = 0; x <= width; x += size) {
+        for (let y = 0; y <= height; y += size) {
+          ctx.beginPath();
+          ctx.arc(x, y, 1 / zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
     ctx.restore();
@@ -480,6 +508,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     if (!ctx) return;
 
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+    if (transformState.isActive && transformState.layerId) {
+      const layerCanvas = layerCanvases.current.get(transformState.layerId);
+      if (layerCanvas) {
+        ctx.save();
+        ctx.translate(transformState.x, transformState.y);
+        ctx.rotate((transformState.rotation * Math.PI) / 180);
+        ctx.scale(transformState.scaleX, transformState.scaleY);
+        ctx.drawImage(layerCanvas, -transformState.width / 2, -transformState.height / 2);
+        ctx.restore();
+      }
+      return;
+    }
 
     if (isDrawing && currentPathRef.current.length > 0) {
       if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
@@ -577,6 +618,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     return { ...p, x: ruler.x + vx * dot, y: ruler.y + vy * dot };
   };
 
+  useEffect(() => {
+    redrawPreview();
+  }, [transformState, redrawPreview]);
+
   const onStart = (e: React.PointerEvent) => {
     const clientX = e.clientX;
     const clientY = e.clientY;
@@ -589,6 +634,20 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     const rect = canvasRef.current.getBoundingClientRect();
     const px = ((clientX - rect.left) / rect.width) * width;
     const py = ((clientY - rect.top) / rect.height) * height;
+
+    if (tool === 'transform' && transformState.isActive) {
+      const handle = (e.target as HTMLElement).getAttribute('data-handle');
+      if (handle) {
+        setTransformDrag({
+          type: handle,
+          startX: px,
+          startY: py,
+          startState: { ...transformState }
+        });
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        return;
+      }
+    }
 
     if (tool === 'ruler') {
       if (!ruler.isActive) {
@@ -647,6 +706,40 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     const rect = canvasRef.current.getBoundingClientRect();
     const px = ((clientX - rect.left) / rect.width) * width;
     const py = ((clientY - rect.top) / rect.height) * height;
+
+    if (transformDrag) {
+      const dx = px - transformDrag.startX;
+      const dy = py - transformDrag.startY;
+      const { startState, type } = transformDrag;
+      
+      let newState = { ...startState };
+      
+      if (type === 'move') {
+        newState.x = startState.x + dx;
+        newState.y = startState.y + dy;
+      } else if (type === 'rotate') {
+        const angle = Math.atan2(py - startState.y, px - startState.x) * (180 / Math.PI);
+        const startAngle = Math.atan2(transformDrag.startY - startState.y, transformDrag.startX - startState.x) * (180 / Math.PI);
+        newState.rotation = startState.rotation + (angle - startAngle);
+      } else {
+        // Scaling
+        const rad = (startState.rotation * Math.PI) / 180;
+        const cos = Math.cos(-rad);
+        const sin = Math.sin(-rad);
+        
+        // Local coordinates
+        const ldx = dx * cos - dy * sin;
+        const ldy = dx * sin + dy * cos;
+        
+        if (type.includes('e')) newState.scaleX = startState.scaleX + (ldx * 2) / startState.width;
+        if (type.includes('w')) newState.scaleX = startState.scaleX - (ldx * 2) / startState.width;
+        if (type.includes('s')) newState.scaleY = startState.scaleY + (ldy * 2) / startState.height;
+        if (type.includes('n')) newState.scaleY = startState.scaleY - (ldy * 2) / startState.height;
+      }
+      
+      onTransformChange(newState);
+      return;
+    }
 
     if (ruler.isDragging) {
         setRuler(prev => ({ ...prev, x: px, y: py }));
@@ -742,6 +835,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     if (isPanning) {
       setIsPanning(false);
       lastPanPosRef.current = null;
+    } else if (transformDrag) {
+      setTransformDrag(null);
     } else if (ruler.isDragging || ruler.isRotating) {
       setRuler(prev => ({ ...prev, isDragging: false, isRotating: false }));
     } else if (isDrawing) {
@@ -875,7 +970,52 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         return exportCanvas.toDataURL();
     },
     clearSelection: () => { setLassoPoints(null); redraw(); },
-    resetView: () => { setZoom(1); setPanOffset({ x: 0, y: 0 }); }
+    resetView: () => { setZoom(1); setPanOffset({ x: 0, y: 0 }); },
+    commitTransform: () => {
+      if (!transformState.isActive || !transformState.layerId) return;
+      const layerCanvas = layerCanvases.current.get(transformState.layerId);
+      if (!layerCanvas) return;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext('2d')!;
+      
+      tempCtx.save();
+      tempCtx.translate(transformState.x, transformState.y);
+      tempCtx.rotate((transformState.rotation * Math.PI) / 180);
+      tempCtx.scale(transformState.scaleX, transformState.scaleY);
+      tempCtx.drawImage(layerCanvas, -transformState.width / 2, -transformState.height / 2);
+      tempCtx.restore();
+
+      const ctx = layerCanvas.getContext('2d')!;
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(tempCanvas, 0, 0);
+      
+      onTransformChange({ ...transformState, isActive: false });
+      onActionComplete({
+        id: `transform_${Date.now()}`,
+        tool: 'transform',
+        layerId: transformState.layerId,
+        points: [],
+        color: '',
+        settings: settings
+      });
+      redraw();
+    },
+    getLayersData: async () => {
+      const data: { name: string; url: string }[] = [];
+      for (const layer of layers) {
+        const canvas = layerCanvases.current.get(layer.id);
+        if (canvas) {
+          data.push({
+            name: layer.name,
+            url: canvas.toDataURL()
+          });
+        }
+      }
+      return data;
+    }
   }));
 
   useEffect(() => { redraw(); redrawPreview(); }, [redraw, redrawPreview, width, height]);
@@ -897,19 +1037,77 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       >
         <div className="absolute inset-0 -z-10" style={{ backgroundColor }} />
         
-        {/* Brush Cursor */}
+        {/* Brush Cursor HUD */}
         {cursorPos && !isPanning && !isSpaceDown && (
           <div 
-            className="absolute pointer-events-none z-[500] border border-white/30 rounded-full shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
+            className="absolute pointer-events-none z-[500] flex flex-col items-center gap-2"
             style={{
-              width: settings.size,
-              height: settings.size,
               left: cursorPos.x,
               top: cursorPos.y,
               transform: 'translate(-50%, -50%)',
-              backgroundColor: tool === 'eraser' ? 'rgba(255,255,255,0.1)' : 'transparent'
             }}
-          />
+          >
+            <div 
+              className="border border-white/50 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.4)] flex items-center justify-center transition-all duration-75"
+              style={{
+                width: settings.size,
+                height: settings.size,
+                backgroundColor: tool === 'eraser' ? 'rgba(100, 150, 255, 0.2)' : 'transparent'
+              }}
+            >
+              <div className="w-1 h-1 bg-white rounded-full" />
+            </div>
+            {/* HUD Tooltip */}
+            <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded border border-white/10 text-[8px] font-black text-white uppercase tracking-widest whitespace-nowrap shadow-xl">
+              Size: {Math.round(settings.size)}px (Hardness: {Math.round(settings.hardness * 100)}%)
+            </div>
+          </div>
+        )}
+
+        {/* Transform UI */}
+        {transformState.isActive && (
+          <div 
+            className="absolute z-[400] border-2 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+            style={{
+              left: transformState.x,
+              top: transformState.y,
+              width: transformState.width * transformState.scaleX,
+              height: transformState.height * transformState.scaleY,
+              transform: `translate(-50%, -50%) rotate(${transformState.rotation}deg)`,
+            }}
+          >
+            <div 
+              className="absolute inset-0 cursor-move" 
+              data-handle="move"
+              onPointerDown={onStart as any}
+            />
+            {/* Handles */}
+            {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(handle => (
+              <div 
+                key={handle}
+                data-handle={handle}
+                onPointerDown={onStart as any}
+                className="absolute w-3 h-3 bg-white border-2 border-amber-500 rounded-sm shadow-md cursor-pointer z-[410]"
+                style={{
+                  top: handle.includes('n') ? 0 : handle.includes('s') ? '100%' : '50%',
+                  left: handle.includes('w') ? 0 : handle.includes('e') ? '100%' : '50%',
+                  transform: 'translate(-50%, -50%)'
+                }}
+              />
+            ))}
+            {/* Rotation Handle */}
+            <div 
+              data-handle="rotate"
+              onPointerDown={onStart as any}
+              className="absolute top-[-30px] left-1/2 -translate-x-1/2 w-4 h-4 bg-amber-500 rounded-full border-2 border-white shadow-md cursor-crosshair z-[410]"
+            />
+            {/* Transform HUD */}
+            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-[9px] font-black text-white uppercase tracking-widest whitespace-nowrap shadow-2xl flex gap-3">
+              <span>W: {Math.round(transformState.scaleX * 100)}%</span>
+              <span>H: {Math.round(transformState.scaleY * 100)}%</span>
+              <span className="text-amber-500">R: {Math.round(transformState.rotation)}°</span>
+            </div>
+          </div>
         )}
 
         <canvas 
