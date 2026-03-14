@@ -44,6 +44,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   const [tempShape, setTempShape] = useState<Point[] | null>(null);
 
   const [cursorPos, setCursorPos] = useState<Point | null>(null);
+  const cursorRef = useRef<Point | null>(null);
+  const rafId = useRef<number | null>(null);
+  const bufferCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const smoothingBufferRef = useRef<Point[]>([]);
 
   // Ruler State
   const [ruler, setRuler] = useState<RulerState>({
@@ -209,7 +213,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     }
 
     const { 
-      size, hardness, flow, shape, brushTipData, 
+      size, hardness, flow, opacity = 1, shape, brushTipData, 
       thicknessStart = 1, thicknessEnd = 1, 
       opacityStart = 1, opacityEnd = 1,
       fadeLengthStart = 0.2, fadeLengthEnd = 0.2, fadeShape = 0.5,
@@ -221,7 +225,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     if (['line', 'rect', 'circle', 'measure'].includes(action.tool)) {
       targetCtx.strokeStyle = action.color;
       targetCtx.lineWidth = size;
-      targetCtx.globalAlpha = flow;
+      targetCtx.globalAlpha = flow * opacity;
       targetCtx.lineCap = 'round';
       targetCtx.lineJoin = 'round';
       
@@ -313,7 +317,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         let currentSize = Math.max(0.1, size * taperSizeMult * (pressureSize ? pressureValue : 1.0));
         if (sizeJitter > 0) currentSize *= (1 - sizeJitter + Math.random() * sizeJitter);
         
-        let currentFlow = Math.max(0, flow * taperAlphaMult * (pressureOpacity ? pressureValue : 1.0));
+        let currentFlow = Math.max(0, flow * opacity * taperAlphaMult * (pressureOpacity ? pressureValue : 1.0));
         if (opacityJitter > 0) currentFlow *= (1 - opacityJitter + Math.random() * opacityJitter);
         
         const tip = getBrushTip(effectiveColor, currentSize, hardness, shape, brushTipData);
@@ -621,8 +625,47 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
   };
 
   useEffect(() => {
-    redrawPreview();
-  }, [transformState, redrawPreview]);
+    const buffer = document.createElement('canvas');
+    buffer.width = width;
+    buffer.height = height;
+    bufferCanvasRef.current = buffer;
+  }, [width, height]);
+
+  const updateCursor = useCallback(() => {
+    if (cursorRef.current) {
+      setCursorPos(cursorRef.current);
+    }
+    rafId.current = requestAnimationFrame(updateCursor);
+  }, []);
+
+  useEffect(() => {
+    rafId.current = requestAnimationFrame(updateCursor);
+    return () => {
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+    };
+  }, [updateCursor]);
+
+  const getWeightedPoint = (points: Point[]): Point => {
+    if (points.length === 0) return { x: 0, y: 0, pressure: 1 };
+    let totalWeight = 0;
+    let x = 0;
+    let y = 0;
+    let pressure = 0;
+
+    points.forEach((p, i) => {
+      const weight = (i + 1) / points.length;
+      x += p.x * weight;
+      y += p.y * weight;
+      pressure += (p.pressure ?? 1) * weight;
+      totalWeight += weight;
+    });
+
+    return {
+      x: x / totalWeight,
+      y: y / totalWeight,
+      pressure: pressure / totalWeight
+    };
+  };
 
   const onStart = (e: React.PointerEvent) => {
     const clientX = e.clientX;
@@ -674,7 +717,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     if (activeLayer?.isLocked) return;
 
     let pressure = e.pressure;
-    if (e.pointerType === 'mouse') pressure = 1.0;
+    if (e.pointerType === 'mouse' && !e.pressure) pressure = 1.0;
     
     let targetPoint: Point = { x: px, y: py, pressure };
     
@@ -686,15 +729,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       targetPoint = snapToRuler(targetPoint);
     }
 
-    setCursorPos(targetPoint);
+    cursorRef.current = targetPoint;
     setIsDrawing(true);
     currentPathRef.current = [targetPoint];
     lastPointRef.current = targetPoint;
-    stabilizedPointRef.current = targetPoint; // Initialize stabilizer
+    stabilizedPointRef.current = targetPoint; 
+    smoothingBufferRef.current = [targetPoint];
+    
+    if (bufferCanvasRef.current) {
+      const bCtx = bufferCanvasRef.current.getContext('2d');
+      if (bCtx) bCtx.clearRect(0, 0, width, height);
+    }
+
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  const onMove = useCallback((e: PointerEvent) => {
+  const onMove = useCallback((e: PointerEvent | React.PointerEvent) => {
     const clientX = e.clientX;
     const clientY = e.clientY;
     if (isPanning && lastPanPosRef.current) {
@@ -709,8 +759,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     const px = ((clientX - rect.left) / rect.width) * width;
     const py = ((clientY - rect.top) / rect.height) * height;
 
-    // Update cursor position for preview
-    setCursorPos({ x: px, y: py });
+    let pressure = (e as PointerEvent).pressure;
+    if (e.pointerType === 'mouse' && !pressure) pressure = 1.0;
+    
+    const rawPoint: Point = { x: px, y: py, pressure };
+    cursorRef.current = rawPoint;
 
     if (transformDrag) {
       const dx = px - transformDrag.startX;
@@ -758,10 +811,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
 
     if (!isDrawing || !activeLayerId) return;
     
-    let pressure = e.pressure;
-    if (e.pointerType === 'mouse') pressure = 1.0;
-    
-    let targetPoint: Point = { x: px, y: py, pressure };
+    let targetPoint: Point = rawPoint;
     
     if (gridSettings.snap) {
       targetPoint = snapToGrid(targetPoint);
@@ -771,73 +821,46 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
         targetPoint = snapToRuler(targetPoint);
     }
     
-    // Multi-Stage Smoothing System - Skip for shape tools
-    if (stabilizedPointRef.current && !['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
-      // 1. "Rope" Smoothing (Smoothing Delay)
-      // smoothingDelay is interpreted as rope radius (0 to 500)
-      if (settings.smoothingDelay > 0) {
-        const dx = targetPoint.x - stabilizedPointRef.current.x;
-        const dy = targetPoint.y - stabilizedPointRef.current.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const ropeLength = settings.smoothingDelay * 0.5; // Scaled for better feel
-
-        if (dist > ropeLength) {
-          const ratio = (dist - ropeLength) / dist;
-          targetPoint.x = stabilizedPointRef.current.x + dx * ratio;
-          targetPoint.y = stabilizedPointRef.current.y + dy * ratio;
-        } else {
-          // Point stays within rope slack - don't update targetPoint position
-          targetPoint.x = stabilizedPointRef.current.x;
-          targetPoint.y = stabilizedPointRef.current.y;
-        }
+    // Line Smoothing (Stabilization)
+    if (!['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
+      smoothingBufferRef.current.push(targetPoint);
+      if (smoothingBufferRef.current.length > 8) {
+        smoothingBufferRef.current.shift();
       }
-
-      // 2. Exponential Smoothing (Stabilization)
-      const weight = 1 - Math.pow(settings.stabilization, 0.5);
-      let smoothedX = stabilizedPointRef.current.x + (targetPoint.x - stabilizedPointRef.current.x) * weight;
-      let smoothedY = stabilizedPointRef.current.y + (targetPoint.y - stabilizedPointRef.current.y) * weight;
-      
-      // 3. Secondary Smoothing (Smoothing Aggression)
-      if (settings.smoothingAggression > 0) {
-        const aggWeight = 1 - Math.pow(settings.smoothingAggression, 0.8);
-        smoothedX = stabilizedPointRef.current.x + (smoothedX - stabilizedPointRef.current.x) * aggWeight;
-        smoothedY = stabilizedPointRef.current.y + (smoothedY - stabilizedPointRef.current.y) * aggWeight;
-      }
-
-      const smoothedPressure = (stabilizedPointRef.current.pressure ?? 1) + ((targetPoint.pressure ?? 1) - (stabilizedPointRef.current.pressure ?? 1)) * weight;
-      targetPoint = { x: smoothedX, y: smoothedY, pressure: smoothedPressure };
-    }
-    
-    if (ruler.isActive && (tool === 'pen' || tool === 'brush' || tool === 'eraser' || ['line', 'rect', 'circle', 'measure'].includes(tool))) {
-        targetPoint = snapToRuler(targetPoint);
+      targetPoint = getWeightedPoint(smoothingBufferRef.current);
     }
     
     if (['line', 'rect', 'circle', 'measure', 'capture'].includes(tool)) {
       lastPointRef.current = targetPoint;
       redrawPreview();
-      setCursorPos({ x: px, y: py });
       return;
     }
     
-    setCursorPos({ x: px, y: py });
-
-    const ctx = previewCanvasRef.current?.getContext('2d');
-    if (ctx && lastPointRef.current) {
+    const bCtx = bufferCanvasRef.current?.getContext('2d');
+    const pCtx = previewCanvasRef.current?.getContext('2d');
+    
+    if (bCtx && pCtx && lastPointRef.current) {
       const activeLayer = layers.find(l => l.id === activeLayerId);
-      ctx.save();
-      if (activeLayer?.isAlphaLocked) ctx.globalCompositeOperation = 'source-atop';
       
+      // Draw to buffer
+      bCtx.save();
       const action = { tool, color, settings, points: [lastPointRef.current, targetPoint] };
-      renderAction(ctx, action, true);
-      ctx.restore();
+      renderAction(bCtx, action, true);
+      bCtx.restore();
+
+      // Sync preview
+      pCtx.clearRect(0, 0, width, height);
+      pCtx.save();
+      if (activeLayer?.isAlphaLocked) pCtx.globalCompositeOperation = 'source-atop';
+      pCtx.drawImage(bufferCanvasRef.current!, 0, 0);
+      pCtx.restore();
     }
     
     currentPathRef.current.push(targetPoint);
     lastPointRef.current = targetPoint;
-    stabilizedPointRef.current = targetPoint;
-  }, [isPanning, isDrawing, tool, color, settings, width, height, activeLayerId, layers, renderAction, ruler, redrawPreview]);
+  }, [isPanning, isDrawing, tool, color, settings, width, height, activeLayerId, layers, renderAction, ruler, redrawPreview, gridSettings.snap, transformDrag, onTransformChange]);
 
-  const onEnd = useCallback((e: PointerEvent) => {
+  const onEnd = useCallback((e: PointerEvent | React.PointerEvent) => {
     if (isPanning) {
       setIsPanning(false);
       lastPanPosRef.current = null;
@@ -847,6 +870,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
       setRuler(prev => ({ ...prev, isDragging: false, isRotating: false }));
     } else if (isDrawing) {
       setIsDrawing(false);
+      smoothingBufferRef.current = [];
       if (tool === 'lasso') {
           setLassoPoints(currentPathRef.current);
       } else if (tool === 'capture' && lastPointRef.current && currentPathRef.current.length > 0) {
@@ -937,14 +961,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
 
   useEffect(() => {
     if (isDrawing || isPanning || ruler.isDragging || ruler.isRotating) {
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onEnd);
-      window.addEventListener('pointercancel', onEnd);
+      window.addEventListener('pointermove', onMove as any);
+      window.addEventListener('pointerup', onEnd as any);
+      window.addEventListener('pointercancel', onEnd as any);
     }
     return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onEnd);
-      window.removeEventListener('pointercancel', onEnd);
+      window.removeEventListener('pointermove', onMove as any);
+      window.removeEventListener('pointerup', onEnd as any);
+      window.removeEventListener('pointercancel', onEnd as any);
     };
   }, [isDrawing, isPanning, ruler.isDragging, ruler.isRotating, onMove, onEnd]);
 
@@ -1037,7 +1061,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
     <div 
       ref={containerRef} 
       className="flex-1 w-full h-full overflow-hidden flex items-center justify-center bg-[#0d0f14]"
-      onPointerMove={(e) => !isDrawing && !isPanning && onMove(e.nativeEvent)}
+      onPointerMove={(e) => !isDrawing && !isPanning && onMove(e)}
       onPointerLeave={onPointerLeave}
     >
       <div 
@@ -1183,32 +1207,30 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
             style={{
               left: `${(cursorPos.x / width) * 100}%`,
               top: `${(cursorPos.y / height) * 100}%`,
-              width: settings.size * zoom,
-              height: settings.size * zoom,
+              width: settings.size,
+              height: settings.size,
               transform: 'translate(-50%, -50%)',
               boxShadow: '0 0 0 1px rgba(0,0,0,0.2)'
-            }}
-          />
-        )}
-
-        {(isAdjustingSize || showSizeIndicator) && (
-          <div 
-            className="absolute pointer-events-none z-[300] border-2 border-white/60 rounded-full mix-blend-difference shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-all duration-75"
-            style={{
-              left: (width * zoom) / 2 - panOffset.x,
-              top: (height * zoom) / 2 - panOffset.y,
-              width: settings.size * zoom,
-              height: settings.size * zoom,
-              transform: 'translate(-50%, -50%)',
             }}
           />
         )}
       </div>
 
       {(isAdjustingSize || showSizeIndicator) && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-12 md:translate-y-16 pointer-events-none z-[500] flex flex-col items-center gap-1 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-2xl border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-200">
-          <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{tool} Size</span>
-          <span className="text-3xl font-black text-[hsl(var(--h),var(--s),var(--l))]">{Math.round(settings.size)}<span className="text-sm ml-1 opacity-40">PX</span></span>
+        <div className="absolute inset-0 pointer-events-none z-[500] flex items-center justify-center overflow-hidden">
+          <div className="relative flex flex-col items-center gap-6">
+            <div 
+              className="border-2 border-white/60 rounded-full mix-blend-difference shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all duration-75"
+              style={{ 
+                width: settings.size * zoom, 
+                height: settings.size * zoom,
+              }}
+            />
+            <div className="bg-black/80 backdrop-blur-xl px-6 py-3 rounded-2xl border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col items-center gap-1">
+              <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{tool} Size</span>
+              <span className="text-3xl font-black text-[hsl(var(--h),var(--s),var(--l))]">{Math.round(settings.size)}<span className="text-sm ml-1 opacity-40">PX</span></span>
+            </div>
+          </div>
         </div>
       )}
     </div>

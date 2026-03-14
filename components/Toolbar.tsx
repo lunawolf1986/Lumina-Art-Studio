@@ -43,7 +43,7 @@ const WavyStrokePreview: React.FC<{ settings: BrushSettings; color: string; isAc
     const height = canvas.height;
     
     const renderStep = (x: number, y: number, currentFlow: number, currentSize: number) => {
-      ctx.globalAlpha = currentFlow;
+      ctx.globalAlpha = currentFlow * (settings.opacity ?? 1);
       if (shape === 'custom' && brushTipData) {
         const img = new Image();
         img.src = brushTipData;

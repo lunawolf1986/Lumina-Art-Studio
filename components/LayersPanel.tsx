@@ -211,7 +211,7 @@ const LayersPanel: React.FC<LayersPanelProps> = ({
           <div 
             key={layer.id} 
             onClick={() => onSelectLayer(layer.id)} 
-            className={`group flex flex-col gap-0.5 p-1.5 rounded-lg border transition-all cursor-pointer ${activeLayerId === layer.id ? 'bg-[hsla(var(--h),var(--s),var(--l),0.06)] border-[hsl(var(--h),var(--s),var(--l),0.2)]' : 'border-transparent hover:bg-[var(--color-bg-tertiary)]'}`}
+            className={`group flex flex-col gap-0.5 p-1.5 rounded-lg border transition-all cursor-pointer ${activeLayerId === layer.id ? 'bg-[hsla(var(--h),var(--s),var(--l),0.15)] border-[hsl(var(--h),var(--s),var(--l))] shadow-[0_0_15px_hsla(var(--h),var(--s),var(--l),0.2)] ring-1 ring-[hsl(var(--h),var(--s),var(--l),0.3)]' : 'border-transparent hover:bg-[var(--color-bg-tertiary)]'}`}
           >
             <div className="flex items-center gap-2 md:gap-3">
               <button onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id); }} className="p-0.5 hover:bg-black/10 rounded transition-colors flex-shrink-0">

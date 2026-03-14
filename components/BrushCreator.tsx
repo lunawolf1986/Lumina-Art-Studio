@@ -40,7 +40,7 @@ const WavyArchitectPreview: React.FC<{ settings: BrushSettings; name: string }> 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     const { 
-      size, hardness, flow, shape, brushTipData, spacing: spacingMult, rotation, jitter, angleFollow, 
+      size, hardness, flow, opacity = 1, shape, brushTipData, spacing: spacingMult, rotation, jitter, angleFollow, 
       thicknessStart = 1, thicknessEnd = 1, opacityStart = 1, opacityEnd = 1,
       fadeLengthStart = 0.2, fadeLengthEnd = 0.2, fadeShape = 0.5,
       pressureSize, pressureOpacity, pressureCurve = 1.0
@@ -66,7 +66,7 @@ const WavyArchitectPreview: React.FC<{ settings: BrushSettings; name: string }> 
         ctx.translate(offset, offset);
       }
 
-      ctx.globalAlpha = Math.max(0, currentFlow);
+      ctx.globalAlpha = Math.max(0, currentFlow * opacity);
       const fill = '#ff9d00';
       
       if (shape === 'custom' && brushTipData) {
@@ -347,6 +347,7 @@ const BrushCreator: React.FC<BrushCreatorProps> = ({ onClose, onSave, initialSet
                 <div className="grid grid-cols-2 gap-2">
                   <Slider label="Size" value={settings.size} unit="px" min={1} max={500} onChange={(v:any) => setSettings({...settings, size: v})} />
                   <Slider label="Flow" value={Math.round(settings.flow * 100)} unit="%" min={0} max={100} onChange={(v:any) => setSettings({...settings, flow: v/100})} />
+                  <Slider label="Opacity" value={Math.round(settings.opacity * 100)} unit="%" min={0} max={100} onChange={(v:any) => setSettings({...settings, opacity: v/100})} />
                   <Slider label="Hard" value={Math.round(settings.hardness * 100)} unit="%" min={0} max={100} onChange={(v:any) => setSettings({...settings, hardness: v/100})} />
                   <Slider label="Gap" value={settings.spacing} unit="" min={0.01} max={1.0} step={0.01} onChange={(v:any) => setSettings({...settings, spacing: v})} />
                 </div>

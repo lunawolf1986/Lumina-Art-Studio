@@ -10,7 +10,7 @@ import {
   Undo as UndoIcon, Redo as RedoIcon, Scissors, ChevronRight, ChevronLeft, 
   Download, Monitor, Layers as LayersIcon, Palette as PaletteIcon, 
   Settings2, Upload, Circle, Maximize, Square, Image as ImageIcon, 
-  RotateCcw, Zap, Book, BookOpen, FileText, Smartphone, Layout, Tv, Twitter, Youtube, Printer,
+  RotateCcw, Zap, Book, BookOpen, FileText, Smartphone, Layout, Tv, Twitter, Youtube, Printer, Droplets,
   Sparkles, PenTool, Smartphone as PhoneIcon, Instagram, Languages, Columns, Rows, Tally4, Grid3X3,
   Share2, Check, X,
   // Added missing Wind icon import
@@ -22,7 +22,7 @@ import { Tool, DrawingAction, BrushSettings, Layer, Theme, AccentColor, BrushPre
 const STUDIO_PALETTE = ["#000000", "#FFFFFF", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF"];
 
 const DEFAULT_BRUSH_SETTINGS: BrushSettings = {
-  size: 20, hardness: 0.8, spacing: 0.02, flow: 1.0, jitter: 0.0,
+  size: 20, hardness: 0.8, spacing: 0.02, flow: 1.0, opacity: 1.0, jitter: 0.0,
   angleJitter: 0.0, sizeJitter: 0.0, opacityJitter: 0.0,
   stabilization: 0.5, smoothingAggression: 0, smoothingDelay: 0,
   shape: 'round', rotation: 0, angleFollow: false,
@@ -762,13 +762,21 @@ const App: React.FC = () => {
           />
 
           {['pen', 'brush', 'eraser', 'line', 'rect', 'circle', 'measure'].includes(tool) && (
-            <QuickSizeSlider 
-              value={currentSettings.size} 
-              onChange={(v) => setCurrentSettings(prev => ({ ...prev, size: v }))}
-              tool={tool}
-              accent={accent}
-              onDraggingChange={setIsAdjustingSize}
-            />
+            <div className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 flex flex-row items-center gap-2 md:gap-4 z-[160]">
+              <QuickSizeSlider 
+                value={currentSettings.size} 
+                onChange={(v) => setCurrentSettings(prev => ({ ...prev, size: v }))}
+                tool={tool}
+                accent={accent}
+                onDraggingChange={setIsAdjustingSize}
+              />
+              <QuickOpacitySlider 
+                value={Math.round((currentSettings.opacity ?? 1) * 100)} 
+                onChange={(v) => setCurrentSettings(prev => ({ ...prev, opacity: v / 100 }))}
+                tool={tool}
+                accent={accent}
+              />
+            </div>
           )}
 
           {!showRightPanel && (
@@ -847,6 +855,7 @@ const App: React.FC = () => {
                 </div>
 
                 <BrushSlider label="Size" value={currentSettings.size} unit="px" min={1} max={500} onChange={v => setCurrentSettings({...currentSettings, size: v})} />
+                <BrushSlider label="Opacity" value={Math.round((currentSettings.opacity ?? 1) * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, opacity: v / 100})} />
                 <BrushSlider label="Flow" value={Math.round(currentSettings.flow * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, flow: v / 100})} />
                 <BrushSlider label="Hardness" value={Math.round(currentSettings.hardness * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, hardness: v / 100})} />
                 
@@ -1050,6 +1059,49 @@ const ToolBtnSmall = ({ active, onClick, icon, label }: any) => (
     {icon} {label}
   </button>
 );
+
+const QuickOpacitySlider = ({ value, onChange, tool, accent }: { value: number, onChange: (v: number) => void, tool: string, accent: string }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  
+  return (
+    <div className="flex flex-col items-center gap-2 select-none group">
+      <div className="relative h-32 md:h-40 w-5 md:w-6 bg-black/40 backdrop-blur-md rounded-full border border-white/10 flex flex-col items-center py-3 overflow-hidden shadow-2xl">
+        <div 
+          className="absolute bottom-0 left-0 right-0 bg-[hsl(var(--h),var(--s),var(--l))] opacity-30 transition-all duration-75"
+          style={{ height: `${value}%` }}
+        />
+        <input 
+          type="range" 
+          min="0" 
+          max="100" 
+          value={value} 
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          onPointerDown={() => setIsDragging(true)}
+          onPointerUp={() => setIsDragging(false)}
+          onPointerLeave={() => setIsDragging(false)}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-none"
+          style={{ 
+            writingMode: 'vertical-lr',
+            direction: 'rtl',
+            appearance: 'slider-vertical',
+            width: '100%',
+            height: '100%'
+          } as any}
+        />
+        <div className="relative z-10 flex flex-col items-center justify-between h-full pointer-events-none py-1">
+          <div className="flex flex-col items-center">
+            <span className="text-[8px] md:text-[10px] font-black text-white">{value}</span>
+            <span className="text-[5px] font-bold opacity-30">%</span>
+          </div>
+          <Droplets size={10} className="opacity-30" />
+        </div>
+      </div>
+      <div className={`px-2 py-1 rounded bg-black/80 backdrop-blur-md border border-white/10 transition-all duration-200 ${isDragging ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>
+         <span className="text-[8px] md:text-[9px] font-black text-[hsl(var(--h),var(--s),var(--l))] uppercase whitespace-nowrap">Opacity</span>
+      </div>
+    </div>
+  );
+};
 
 const QuickSizeSlider = ({ value, onChange, tool, accent, onDraggingChange }: { value: number, onChange: (v: number) => void, tool: string, accent: string, onDraggingChange?: (isDragging: boolean) => void }) => {
   const [isDragging, setIsDragging] = useState(false);

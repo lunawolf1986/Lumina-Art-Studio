@@ -36,6 +36,7 @@ export interface BrushSettings {
   hardness: number; // 0 to 1
   spacing: number; // 0.01 to 2.0
   flow: number;    // 0 to 1
+  opacity: number; // 0 to 1
   jitter: number;  // 0 to 1 (Position scattering)
   angleJitter: number; // 0 to 1
   sizeJitter: number;  // 0 to 1
