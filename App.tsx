@@ -12,7 +12,7 @@ import {
   Settings2, Upload, Circle, Maximize, Square, Image as ImageIcon, 
   RotateCcw, Zap, Book, BookOpen, FileText, Smartphone, Layout, Tv, Twitter, Youtube, Printer,
   Sparkles, PenTool, Smartphone as PhoneIcon, Instagram, Languages, Columns, Rows, Tally4, Grid3X3,
-  Share2, Check,
+  Share2, Check, X,
   // Added missing Wind icon import
   Wind,
   MousePointer2, Ruler as RulerIcon, Box, Type, Hash, Compass
@@ -67,6 +67,11 @@ const INITIAL_PRESETS: BrushPreset[] = [
   { id: 'blueprint-line', name: 'Drafting Line', category: 'Blueprint', tool: 'line', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 1, hardness: 1.0, flow: 1.0, stabilization: 1.0, pressureSize: false, pressureOpacity: false } },
   { id: 'blueprint-heavy', name: 'Heavy Border', category: 'Blueprint', tool: 'line', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 3, hardness: 1.0, flow: 1.0, stabilization: 1.0, pressureSize: false, pressureOpacity: false } },
   { id: 'blueprint-dim', name: 'Dimension Line', category: 'Blueprint', tool: 'measure', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 1, hardness: 1.0, flow: 0.6, stabilization: 1.0, pressureSize: false, pressureOpacity: false } },
+
+  // ERASERS
+  { id: 'hard-eraser', name: 'Hard Eraser', category: 'Erasers', tool: 'eraser', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 40, hardness: 1.0, flow: 1.0, spacing: 0.02, pressureSize: true, pressureOpacity: false } },
+  { id: 'soft-eraser', name: 'Soft Eraser', category: 'Erasers', tool: 'eraser', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 80, hardness: 0.2, flow: 1.0, spacing: 0.05, pressureSize: true, pressureOpacity: true } },
+  { id: 'kneaded-eraser', name: 'Kneaded Eraser', category: 'Erasers', tool: 'eraser', settings: { ...DEFAULT_BRUSH_SETTINGS, size: 50, hardness: 0.1, flow: 0.3, spacing: 0.1, jitter: 0.05, shape: 'textured', pressureOpacity: true } },
 ];
 
 const createNewLayer = (name: string): Layer => ({
@@ -118,6 +123,15 @@ const App: React.FC = () => {
   });
   
   const [brushSettings, setBrushSettings] = useState<BrushSettings>(DEFAULT_BRUSH_SETTINGS);
+  const [eraserSettings, setEraserSettings] = useState<BrushSettings>({
+    ...DEFAULT_BRUSH_SETTINGS,
+    size: 40,
+    hardness: 0.9,
+    flow: 1.0,
+    spacing: 0.05,
+    pressureSize: true,
+    pressureOpacity: false
+  });
   const [layers, setLayers] = useState<Layer[]>(() => [createNewLayer('Background')]);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [showRightPanel, setShowRightPanel] = useState(true);
@@ -224,6 +238,13 @@ const App: React.FC = () => {
     if (!activeLayerId && layers.length > 0) setActiveLayerId(layers[layers.length - 1].id);
   }, [layers, activeLayerId]);
 
+  const currentSettings = tool === 'eraser' ? eraserSettings : brushSettings;
+  const setCurrentSettings = tool === 'eraser' ? setEraserSettings : setBrushSettings;
+
+  const [showSizeIndicator, setShowSizeIndicator] = useState(false);
+  const [isAdjustingSize, setIsAdjustingSize] = useState(false);
+  const sizeIndicatorTimer = useRef<NodeJS.Timeout | null>(null);
+
   const handleUndo = useCallback(() => {
     if (transformState.isActive) {
       setTransformState(prev => ({ ...prev, isActive: false }));
@@ -272,6 +293,12 @@ const App: React.FC = () => {
     } else if (transformState.isActive) {
       canvasRef.current?.commitTransform();
     }
+    
+    // If switching to brush or eraser, ensure we show the brush tab
+    if (newTool === 'brush' || newTool === 'eraser' || newTool === 'pen') {
+      setRightPanelTab('brush');
+    }
+    
     setTool(newTool);
   };
   const handleMergeDown = () => {
@@ -442,10 +469,16 @@ const App: React.FC = () => {
         case 'KeyM': setTool('measure'); break;
         case 'KeyV': setTool('pan'); break;
         case 'BracketLeft': 
-          setBrushSettings(prev => ({ ...prev, size: Math.max(1, prev.size - 5) }));
+          setCurrentSettings(prev => ({ ...prev, size: Math.max(1, prev.size - 5) }));
+          setShowSizeIndicator(true);
+          if (sizeIndicatorTimer.current) clearTimeout(sizeIndicatorTimer.current);
+          sizeIndicatorTimer.current = setTimeout(() => setShowSizeIndicator(false), 1000);
           break;
         case 'BracketRight':
-          setBrushSettings(prev => ({ ...prev, size: Math.min(500, prev.size + 5) }));
+          setCurrentSettings(prev => ({ ...prev, size: Math.min(500, prev.size + 5) }));
+          setShowSizeIndicator(true);
+          if (sizeIndicatorTimer.current) clearTimeout(sizeIndicatorTimer.current);
+          sizeIndicatorTimer.current = setTimeout(() => setShowSizeIndicator(false), 1000);
           break;
       }
     };
@@ -630,46 +663,46 @@ const App: React.FC = () => {
 
   return (
     <main className="w-screen h-screen overflow-hidden bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] flex flex-col font-inter">
-      <header className="h-10 md:h-12 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex items-center justify-between px-3 md:px-5 z-[200] flex-shrink-0 shadow-lg">
+      <header className="h-10 md:h-12 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex items-center justify-between px-2 md:px-5 z-[200] flex-shrink-0 shadow-lg">
         <div className="flex items-center gap-1 md:gap-2">
           <div className="flex bg-[var(--color-bg-tertiary)] rounded-lg p-0.5 shadow-inner border border-white/5">
              <button onClick={handleUndo} disabled={history.length === 0} className="p-1 md:p-1.5 rounded hover:bg-white/5 disabled:opacity-10 transition-all active:scale-90"><UndoIcon size={14} /></button>
              <button onClick={handleRedo} disabled={redoStack.length === 0} className="p-1 md:p-1.5 rounded hover:bg-white/5 disabled:opacity-10 transition-all active:scale-90"><RedoIcon size={14} /></button>
           </div>
-          <button onClick={() => canvasRef.current?.resetView()} className="flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1.5 rounded-md text-[8px] md:text-[9px] font-black hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] uppercase tracking-widest border border-white/5 transition-all" title="Reset Viewport">
-             <RotateCcw size={10} /> <span className="hidden sm:inline">Reset View</span>
+          <button onClick={() => canvasRef.current?.resetView()} className="flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[8px] md:text-[9px] font-black hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] uppercase tracking-widest border border-white/5 transition-all" title="Reset Viewport">
+             <RotateCcw size={10} /> <span className="hidden md:inline">Reset View</span>
           </button>
         </div>
         
-        <div className="flex items-center gap-2 group">
+        <div className="flex items-center gap-1 md:gap-2 group">
           <span className="w-1 h-1 rounded-full bg-[hsl(var(--h),var(--s),var(--l))] shadow-[0_0_8px_currentColor]" />
           <input 
             type="text" 
             value={projectName} 
             onChange={(e) => setProjectName(e.target.value)}
-            className="bg-transparent border-none text-[10px] md:text-[11px] font-black tracking-[0.2em] md:tracking-[0.3em] uppercase opacity-90 focus:outline-none focus:opacity-100 hover:opacity-100 transition-opacity w-32 md:w-auto"
+            className="bg-transparent border-none text-[9px] md:text-[11px] font-black tracking-[0.1em] md:tracking-[0.3em] uppercase opacity-90 focus:outline-none focus:opacity-100 hover:opacity-100 transition-opacity w-24 md:w-auto"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           <button 
             onClick={handleShare} 
-            className={`px-3 md:px-4 py-1.5 rounded-md text-[9px] font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight ${isShared ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white hover:bg-white/10'}`}
+            className={`px-2 md:px-4 py-1 md:py-1.5 rounded-md text-[8px] md:text-[9px] font-black shadow-md active:scale-95 transition-all flex items-center gap-1 md:gap-1.5 uppercase tracking-tight ${isShared ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white hover:bg-white/10'}`}
           >
-            {isShared ? <Check size={12} /> : <Share2 size={12} />}
-            <span className="hidden sm:inline">{isShared ? 'Copied!' : 'Share App'}</span>
+            {isShared ? <Check size={10} md:size={12} /> : <Share2 size={10} md:size={12} />}
+            <span className="hidden md:inline">{isShared ? 'Copied!' : 'Share'}</span>
           </button>
 
-          <button onClick={handleSaveProject} className="px-3 md:px-4 py-1.5 bg-white/5 text-white rounded-md text-[9px] font-black shadow-md hover:bg-white/10 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
-            <FileText size={12} /> <span className="hidden sm:inline">Save Project</span>
+          <button onClick={handleSaveProject} className="px-2 md:px-4 py-1 md:py-1.5 bg-white/5 text-white rounded-md text-[8px] md:text-[9px] font-black shadow-md hover:bg-white/10 active:scale-95 transition-all flex items-center gap-1 md:gap-1.5 uppercase tracking-tight">
+            <FileText size={10} md:size={12} /> <span className="hidden md:inline">Save</span>
           </button>
 
-          <button onClick={() => setIsSetupOpen(true)} className="px-3 md:px-4 py-1.5 bg-white/5 text-white rounded-md text-[9px] font-black shadow-md hover:bg-white/10 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
-            <RotateCcw size={12} /> <span className="hidden sm:inline">Studio Setup</span>
+          <button onClick={() => setIsSetupOpen(true)} className="px-2 md:px-4 py-1 md:py-1.5 bg-white/5 text-white rounded-md text-[8px] md:text-[9px] font-black shadow-md hover:bg-white/10 active:scale-95 transition-all flex items-center gap-1 md:gap-1.5 uppercase tracking-tight">
+            <RotateCcw size={10} md:size={12} /> <span className="hidden md:inline">Setup</span>
           </button>
 
-          <button onClick={() => setIsExportModalOpen(true)} className="px-3 md:px-4 py-1.5 bg-[hsl(var(--h),var(--s),var(--l))] text-white rounded-md text-[9px] font-black shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 uppercase tracking-tight">
-            <Download size={12} /> <span className="hidden sm:inline">Export</span>
+          <button onClick={() => setIsExportModalOpen(true)} className="px-2 md:px-4 py-1 md:py-1.5 bg-[hsl(var(--h),var(--s),var(--l))] text-white rounded-md text-[8px] md:text-[9px] font-black shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center gap-1 md:gap-1.5 uppercase tracking-tight">
+            <Download size={10} md:size={12} /> <span className="hidden md:inline">Export</span>
           </button>
 
           {isInstallable && (
@@ -683,25 +716,30 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden relative">
-        <aside className="w-10 md:w-12 h-full bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] flex flex-col items-center relative z-[150] shadow-2xl flex-shrink-0">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        <aside className="w-full md:w-12 h-12 md:h-full bg-[var(--color-bg-secondary)] border-t md:border-t-0 md:border-r border-[var(--color-border)] flex md:flex-col items-center relative z-[150] shadow-2xl flex-shrink-0 order-2 md:order-1">
           <Toolbar 
             currentTool={tool} setTool={handleToolChange}
             color={color} setColor={setColor}
             swatches={swatches} setSwatches={setSwatches}
-            settings={brushSettings} setSettings={setBrushSettings}
+            settings={tool === 'eraser' ? eraserSettings : brushSettings}
+            setSettings={tool === 'eraser' ? setEraserSettings : setBrushSettings}
             onClear={() => { if(activeLayerId && confirm('Clear active layer?')) setHistory(h => h.filter(a => a.layerId !== activeLayerId)) }}
             onToggleLayers={() => setShowRightPanel(s => !s)}
             presets={allPresets}
-            onApplyPreset={(p) => { handleToolChange(p.tool); setBrushSettings(p.settings); }}
+            onApplyPreset={(p) => { 
+              handleToolChange(p.tool); 
+              if (p.tool === 'eraser') setEraserSettings(p.settings);
+              else setBrushSettings(p.settings);
+            }}
             onOpenCreator={() => setIsBrushCreatorOpen(true)}
           />
         </aside>
         
-        <div className="flex-1 relative flex overflow-hidden bg-[#07080a]">
+        <div className="flex-1 relative flex overflow-hidden bg-[#07080a] order-1 md:order-2">
           <Canvas 
               ref={canvasRef}
-              tool={tool} color={color} settings={brushSettings}
+              tool={tool} color={color} settings={tool === 'eraser' ? eraserSettings : brushSettings}
               layers={layers} activeLayerId={activeLayerId}
               history={history}
               onActionComplete={handleActionComplete}
@@ -719,7 +757,19 @@ const App: React.FC = () => {
               gridSettings={gridSettings}
               transformState={transformState}
               onTransformChange={setTransformState}
+              isAdjustingSize={isAdjustingSize}
+              showSizeIndicator={showSizeIndicator}
           />
+
+          {['pen', 'brush', 'eraser', 'line', 'rect', 'circle', 'measure'].includes(tool) && (
+            <QuickSizeSlider 
+              value={currentSettings.size} 
+              onChange={(v) => setCurrentSettings(prev => ({ ...prev, size: v }))}
+              tool={tool}
+              accent={accent}
+              onDraggingChange={setIsAdjustingSize}
+            />
+          )}
 
           {!showRightPanel && (
             <button 
@@ -731,7 +781,13 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <aside className={`h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-border)] flex flex-col shadow-[-15px_0_30px_rgba(0,0,0,0.4)] z-[150] transition-all duration-300 ease-in-out relative overflow-hidden flex-shrink-0 ${showRightPanel ? 'xl:w-[300px] lg:w-[280px] w-[260px] opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-12'}`}>
+        <aside className={`fixed md:relative inset-0 md:inset-auto h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-border)] flex flex-col shadow-[-15px_0_30px_rgba(0,0,0,0.4)] z-[300] md:z-[150] transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0 ${showRightPanel ? 'w-full md:w-[260px] lg:w-[280px] xl:w-[300px] opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full md:translate-x-12'}`}>
+          <div className="flex items-center justify-between md:hidden p-2 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/50">
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">Studio Panels</span>
+            <button onClick={() => setShowRightPanel(false)} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+              <X size={18} />
+            </button>
+          </div>
           <div className="grid grid-cols-5 h-10 flex-shrink-0 bg-[var(--color-bg-tertiary)]/30 border-b border-[var(--color-border)] min-w-[260px]">
             <TabTrigger active={rightPanelTab === 'colors'} onClick={() => setRightPanelTab('colors')} icon={<PaletteIcon size={12} />} label="Palette" />
             <TabTrigger active={rightPanelTab === 'layers'} onClick={() => setRightPanelTab('layers')} icon={<LayersIcon size={12} />} label="Layers" />
@@ -783,16 +839,16 @@ const App: React.FC = () => {
             {rightPanelTab === 'brush' && (
               <div className="flex flex-col h-full bg-[var(--color-bg-secondary)] overflow-y-auto custom-scrollbar p-3 md:p-5 space-y-4 md:space-y-6 min-w-[260px]">
                 <div className="flex flex-col gap-3 bg-[var(--color-bg-tertiary)]/20 p-3 md:p-4 rounded-xl border border-white/5 shadow-inner">
-                  <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Brush Tip Shape</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-40">{tool === 'eraser' ? 'Eraser Tip Shape' : 'Brush Tip Shape'}</span>
                   <div className="grid grid-cols-2 gap-2">
-                     <button onClick={() => setBrushSettings({...brushSettings, shape: 'round'})} className={`flex items-center justify-center gap-1.5 py-1.5 md:py-2 rounded-lg border transition-all ${brushSettings.shape === 'round' ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white border-transparent shadow-md' : 'bg-black/20 border-white/5 opacity-50'}`}><Circle size={12} /><span className="text-[9px] font-black uppercase">Round</span></button>
-                     <button onClick={() => setBrushSettings({...brushSettings, shape: 'textured'})} className={`flex items-center justify-center gap-1.5 py-1.5 md:py-2 rounded-lg border transition-all ${brushSettings.shape === 'textured' ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white border-transparent shadow-md' : 'bg-black/20 border-white/5 opacity-50'}`}><ImageIcon size={12} /><span className="text-[9px] font-black uppercase">Texture</span></button>
+                     <button onClick={() => setCurrentSettings({...currentSettings, shape: 'round'})} className={`flex items-center justify-center gap-1.5 py-1.5 md:py-2 rounded-lg border transition-all ${currentSettings.shape === 'round' ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white border-transparent shadow-md' : 'bg-black/20 border-white/5 opacity-50'}`}><Circle size={12} /><span className="text-[9px] font-black uppercase">Round</span></button>
+                     <button onClick={() => setCurrentSettings({...currentSettings, shape: 'textured'})} className={`flex items-center justify-center gap-1.5 py-1.5 md:py-2 rounded-lg border transition-all ${currentSettings.shape === 'textured' ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white border-transparent shadow-md' : 'bg-black/20 border-white/5 opacity-50'}`}><ImageIcon size={12} /><span className="text-[9px] font-black uppercase">Texture</span></button>
                   </div>
                 </div>
 
-                <BrushSlider label="Size" value={brushSettings.size} unit="px" min={1} max={500} onChange={v => setBrushSettings({...brushSettings, size: v})} />
-                <BrushSlider label="Flow" value={Math.round(brushSettings.flow * 100)} unit="%" min={0} max={100} onChange={v => setBrushSettings({...brushSettings, flow: v / 100})} />
-                <BrushSlider label="Hardness" value={Math.round(brushSettings.hardness * 100)} unit="%" min={0} max={100} onChange={v => setBrushSettings({...brushSettings, hardness: v / 100})} />
+                <BrushSlider label="Size" value={currentSettings.size} unit="px" min={1} max={500} onChange={v => setCurrentSettings({...currentSettings, size: v})} />
+                <BrushSlider label="Flow" value={Math.round(currentSettings.flow * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, flow: v / 100})} />
+                <BrushSlider label="Hardness" value={Math.round(currentSettings.hardness * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, hardness: v / 100})} />
                 
                 <div className="h-px bg-white/5 my-1 md:my-2" />
                 <div className="flex flex-col gap-3 bg-[var(--color-bg-tertiary)]/20 p-3 md:p-4 rounded-xl border border-white/5 shadow-inner">
@@ -800,9 +856,9 @@ const App: React.FC = () => {
                       <Wind size={10} className="text-[hsl(var(--h),var(--s),var(--l))]" />
                       <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Stroke Smoothing</span>
                    </div>
-                   <BrushSlider label="Stabilization" value={Math.round(brushSettings.stabilization * 100)} unit="%" min={0} max={100} onChange={v => setBrushSettings({...brushSettings, stabilization: v / 100})} />
-                   <BrushSlider label="Aggression" value={Math.round(brushSettings.smoothingAggression * 100)} unit="%" min={0} max={100} onChange={v => setBrushSettings({...brushSettings, smoothingAggression: v / 100})} />
-                   <BrushSlider label="Delay / Rope" value={brushSettings.smoothingDelay} unit="px" min={0} max={500} onChange={v => setBrushSettings({...brushSettings, smoothingDelay: v})} />
+                   <BrushSlider label="Stabilization" value={Math.round(currentSettings.stabilization * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, stabilization: v / 100})} />
+                   <BrushSlider label="Aggression" value={Math.round(currentSettings.smoothingAggression * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, smoothingAggression: v / 100})} />
+                   <BrushSlider label="Delay / Rope" value={currentSettings.smoothingDelay} unit="px" min={0} max={500} onChange={v => setCurrentSettings({...currentSettings, smoothingDelay: v})} />
                 </div>
 
                 <div className="h-px bg-white/5 my-1 md:my-2" />
@@ -811,9 +867,9 @@ const App: React.FC = () => {
                       <Sparkles size={10} className="text-[hsl(var(--h),var(--s),var(--l))]" />
                       <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Texture Dynamics</span>
                    </div>
-                   <BrushSlider label="Scattering" value={Math.round(brushSettings.jitter * 100)} unit="%" min={0} max={200} onChange={v => setBrushSettings({...brushSettings, jitter: v / 100})} />
-                   <BrushSlider label="Angle Jitter" value={Math.round(brushSettings.angleJitter * 100)} unit="%" min={0} max={100} onChange={v => setBrushSettings({...brushSettings, angleJitter: v / 100})} />
-                   <BrushSlider label="Size Jitter" value={Math.round(brushSettings.sizeJitter * 100)} unit="%" min={0} max={100} onChange={v => setBrushSettings({...brushSettings, sizeJitter: v / 100})} />
+                   <BrushSlider label="Scattering" value={Math.round(currentSettings.jitter * 100)} unit="%" min={0} max={200} onChange={v => setCurrentSettings({...currentSettings, jitter: v / 100})} />
+                   <BrushSlider label="Angle Jitter" value={Math.round(currentSettings.angleJitter * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, angleJitter: v / 100})} />
+                   <BrushSlider label="Size Jitter" value={Math.round(currentSettings.sizeJitter * 100)} unit="%" min={0} max={100} onChange={v => setCurrentSettings({...currentSettings, sizeJitter: v / 100})} />
                 </div>
 
                 <div className="h-px bg-white/5 my-1 md:my-2" />
@@ -823,37 +879,41 @@ const App: React.FC = () => {
                       <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Pressure Response</span>
                    </div>
                    <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => setBrushSettings({...brushSettings, pressureSize: !brushSettings.pressureSize})} className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[8px] font-black uppercase transition-all ${brushSettings.pressureSize ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white' : 'bg-black/20 text-white/30 border-white/5'}`}>Size</button>
-                      <button onClick={() => setBrushSettings({...brushSettings, pressureOpacity: !brushSettings.pressureOpacity})} className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[8px] font-black uppercase transition-all ${brushSettings.pressureOpacity ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white' : 'bg-black/20 text-white/30 border-white/5'}`}>Opacity</button>
+                      <button onClick={() => setCurrentSettings({...currentSettings, pressureSize: !currentSettings.pressureSize})} className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[8px] font-black uppercase transition-all ${currentSettings.pressureSize ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white' : 'bg-black/20 text-white/30 border-white/5'}`}>Size</button>
+                      <button onClick={() => setCurrentSettings({...currentSettings, pressureOpacity: !currentSettings.pressureOpacity})} className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[8px] font-black uppercase transition-all ${currentSettings.pressureOpacity ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white' : 'bg-black/20 text-white/30 border-white/5'}`}>Opacity</button>
                    </div>
-                   <BrushSlider label="Pressure Curve" value={brushSettings.pressureCurve.toFixed(1)} unit="" min={0.5} max={3.0} step={0.1} onChange={v => setBrushSettings({...brushSettings, pressureCurve: v})} />
+                   <BrushSlider label="Pressure Curve" value={currentSettings.pressureCurve.toFixed(1)} unit="" min={0.5} max={3.0} step={0.1} onChange={v => setCurrentSettings({...currentSettings, pressureCurve: v})} />
                 </div>
 
-                <div className="h-px bg-white/5 my-1 md:my-2" />
-                <div className="flex flex-col gap-3 bg-[var(--color-bg-tertiary)]/20 p-3 md:p-4 rounded-xl border border-white/5 shadow-inner">
-                   <div className="flex items-center gap-2 mb-1">
-                      <Maximize size={10} className="text-[hsl(var(--h),var(--s),var(--l))]" />
-                      <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Live Capture Engine</span>
-                   </div>
-                   <button 
-                     onClick={() => setTool('capture')} 
-                     className={`w-full py-2 rounded-lg border text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 ${tool === 'capture' ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white border-transparent' : 'bg-black/20 border-white/5 opacity-50 hover:opacity-100'}`}
-                   >
-                     <Maximize size={14} /> {tool === 'capture' ? 'Selecting Area...' : 'Capture New Tip'}
-                   </button>
-                   {brushSettings.brushTipData && (
-                     <div className="flex flex-col gap-2">
-                       <div className="flex items-center gap-2 p-2 bg-black/40 rounded-lg border border-white/5">
-                         <img src={brushSettings.brushTipData} className="w-10 h-10 object-contain bg-white/5 rounded border border-white/10" />
-                         <div className="flex flex-col">
-                           <span className="text-[7px] font-black uppercase opacity-40">Active Captured Tip</span>
-                           <button onClick={() => setBrushSettings({...brushSettings, shape: 'round', brushTipData: undefined})} className="text-[7px] font-bold text-red-400 uppercase hover:underline">Reset to Round</button>
-                         </div>
+                {tool !== 'eraser' && (
+                  <>
+                    <div className="h-px bg-white/5 my-1 md:my-2" />
+                    <div className="flex flex-col gap-3 bg-[var(--color-bg-tertiary)]/20 p-3 md:p-4 rounded-xl border border-white/5 shadow-inner">
+                       <div className="flex items-center gap-2 mb-1">
+                          <Maximize size={10} className="text-[hsl(var(--h),var(--s),var(--l))]" />
+                          <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Live Capture Engine</span>
                        </div>
-                       <BrushSlider label="Tip Spacing" value={brushSettings.spacing} unit="" min={0.01} max={1.0} step={0.01} onChange={v => setBrushSettings({...brushSettings, spacing: v})} />
-                     </div>
-                   )}
-                </div>
+                       <button 
+                         onClick={() => setTool('capture')} 
+                         className={`w-full py-2 rounded-lg border text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2 ${tool === 'capture' ? 'bg-[hsl(var(--h),var(--s),var(--l))] text-white border-transparent' : 'bg-black/20 border-white/5 opacity-50 hover:opacity-100'}`}
+                       >
+                         <Maximize size={14} /> {tool === 'capture' ? 'Selecting Area...' : 'Capture New Tip'}
+                       </button>
+                       {currentSettings.brushTipData && (
+                         <div className="flex flex-col gap-2">
+                           <div className="flex items-center gap-2 p-2 bg-black/40 rounded-lg border border-white/5">
+                             <img src={currentSettings.brushTipData} className="w-10 h-10 object-contain bg-white/5 rounded border border-white/10" />
+                             <div className="flex flex-col">
+                               <span className="text-[7px] font-black uppercase opacity-40">Active Captured Tip</span>
+                               <button onClick={() => setCurrentSettings({...currentSettings, shape: 'round', brushTipData: undefined})} className="text-[7px] font-bold text-red-400 uppercase hover:underline">Reset to Round</button>
+                             </div>
+                           </div>
+                           <BrushSlider label="Tip Spacing" value={currentSettings.spacing} unit="" min={0.01} max={1.0} step={0.01} onChange={v => setCurrentSettings({...currentSettings, spacing: v})} />
+                         </div>
+                       )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {rightPanelTab === 'frames' && (
@@ -991,14 +1051,76 @@ const ToolBtnSmall = ({ active, onClick, icon, label }: any) => (
   </button>
 );
 
-const BrushSlider = ({ label, value, unit, min, max, onChange }: any) => (
+const QuickSizeSlider = ({ value, onChange, tool, accent, onDraggingChange }: { value: number, onChange: (v: number) => void, tool: string, accent: string, onDraggingChange?: (isDragging: boolean) => void }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  
+  const handlePointerDown = () => {
+    setIsDragging(true);
+    onDraggingChange?.(true);
+  };
+  
+  const handlePointerUp = () => {
+    setIsDragging(false);
+    onDraggingChange?.(false);
+  };
+  
+  return (
+    <div className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-[160] group select-none">
+      <div className="relative h-40 md:h-56 w-6 md:w-8 bg-black/40 backdrop-blur-md rounded-full border border-white/10 flex flex-col items-center py-4 overflow-hidden shadow-2xl">
+        <div 
+          className="absolute bottom-0 left-0 right-0 bg-[hsl(var(--h),var(--s),var(--l))] opacity-30 transition-all duration-75"
+          style={{ height: `${(value / 500) * 100}%` }}
+        />
+        <input 
+          type="range" 
+          min="1" 
+          max="500" 
+          value={value} 
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-none"
+          style={{ 
+            writingMode: 'vertical-lr',
+            direction: 'rtl',
+            appearance: 'slider-vertical',
+            width: '100%',
+            height: '100%'
+          } as any}
+        />
+        <div className="relative z-10 flex flex-col items-center justify-between h-full pointer-events-none py-1">
+          <span className="text-[7px] font-black uppercase tracking-tighter opacity-30">Max</span>
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] md:text-[11px] font-black text-white">{value}</span>
+            <span className="text-[6px] font-bold opacity-30">PX</span>
+          </div>
+          <span className="text-[7px] font-black uppercase tracking-tighter opacity-30">Min</span>
+        </div>
+      </div>
+      <div className={`px-2 py-1 rounded bg-black/80 backdrop-blur-md border border-white/10 transition-all duration-200 ${isDragging ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>
+         <span className="text-[8px] md:text-[10px] font-black text-[hsl(var(--h),var(--s),var(--l))] uppercase whitespace-nowrap">{tool} Size</span>
+      </div>
+    </div>
+  );
+};
+
+const BrushSlider = ({ label, value, unit, min, max, onChange, step = 1 }: any) => (
   <div className="flex flex-col gap-2 group bg-[var(--color-bg-tertiary)]/20 p-3 md:p-4 rounded-xl border border-white/5 shadow-inner hover:bg-[var(--color-bg-tertiary)]/40 transition-colors">
     <div className="flex justify-between items-end px-0.5">
       <span className="text-[8px] font-black uppercase tracking-widest opacity-40 group-hover:opacity-100 transition-opacity">{label}</span>
       <span className="text-[10px] font-mono font-black text-[hsl(var(--h),var(--s),var(--l))]">{value}{unit}</span>
     </div>
-    <div className="relative h-1.5 flex items-center">
-       <input type="range" min={min} max={max} value={value} onChange={e => onChange(parseFloat(e.target.value))} className="w-full h-1 bg-black/40 rounded-full appearance-none accent-white cursor-pointer" />
+    <div className="relative h-4 flex items-center">
+       <input 
+         type="range" 
+         min={min} 
+         max={max} 
+         step={step}
+         value={value} 
+         onChange={e => onChange(parseFloat(e.target.value))} 
+         className="w-full h-2 bg-black/40 rounded-full appearance-none accent-white cursor-pointer touch-none" 
+       />
     </div>
   </div>
 );

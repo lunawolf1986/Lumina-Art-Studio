@@ -150,27 +150,27 @@ const Toolbar: React.FC<ToolbarProps> = ({
   }, [presets, selectedCategory]);
 
   return (
-    <div className="flex flex-col items-center gap-2 md:gap-3 p-1.5 h-full bg-[#1e1e1e] w-full flex-shrink-0 shadow-inner">
-      <div className="flex flex-col gap-1.5 md:gap-2 w-full items-center py-2 md:py-4">
-        <ToolBtn active={currentTool === 'pan'} onClick={() => setTool('pan')} icon={<Hand size={18} />} label="Pan Tool" />
-        <ToolBtn active={currentTool === 'pen'} onClick={() => setTool('pen')} icon={<Pencil size={18} />} label="Pen Tool" />
-        <ToolBtn active={currentTool === 'transform'} onClick={() => setTool('transform')} icon={<Move size={18} />} label="Transform" />
-        <ToolBtn active={currentTool === 'lasso'} onClick={() => setTool('lasso')} icon={<Lasso size={18} />} label="Lasso Selection" />
-        <ToolBtn active={currentTool === 'frame'} onClick={() => setTool('frame')} icon={<Layout size={18} />} label="Comic Frames" />
-        <ToolBtn active={currentTool === 'ruler'} onClick={() => setTool('ruler')} icon={<Ruler size={18} />} label="Ruler Guide" />
-        <ToolBtn active={currentTool === 'capture'} onClick={() => setTool('capture')} icon={<Maximize size={18} />} label="Capture Brush Tip" />
-        <ToolBtn active={currentTool === 'line'} onClick={() => setTool('line')} icon={<Compass size={18} />} label="Line Tool" />
-        <ToolBtn active={currentTool === 'eraser'} onClick={() => setTool('eraser')} icon={<Eraser size={18} />} label="Eraser" />
-        <div className="h-px w-8 bg-white/5 my-0.5 md:my-1" />
-        <ToolBtn active={showPresets} onClick={() => setShowPresets(!showPresets)} icon={<Bookmark size={18} />} label="Brush Presets" />
-        <ToolBtn active={false} onClick={onOpenCreator} icon={<Wand2 size={18} />} label="Brush Architect" />
+    <div className="flex flex-row md:flex-col items-center gap-2 md:gap-3 p-2 md:p-1.5 h-full bg-[#1e1e1e] w-full flex-shrink-0 shadow-inner overflow-x-auto md:overflow-x-visible no-scrollbar scroll-smooth">
+      <div className="flex flex-row md:flex-col gap-2 md:gap-2 items-center py-1 md:py-4">
+        <ToolBtn active={currentTool === 'pan'} onClick={() => setTool('pan')} icon={<Hand size={20} />} label="Pan Tool" />
+        <ToolBtn active={currentTool === 'pen'} onClick={() => setTool('pen')} icon={<Pencil size={20} />} label="Pen Tool" />
+        <ToolBtn active={currentTool === 'transform'} onClick={() => setTool('transform')} icon={<Move size={20} />} label="Transform" />
+        <ToolBtn active={currentTool === 'lasso'} onClick={() => setTool('lasso')} icon={<Lasso size={20} />} label="Lasso Selection" />
+        <ToolBtn active={currentTool === 'frame'} onClick={() => setTool('frame')} icon={<Layout size={20} />} label="Comic Frames" />
+        <ToolBtn active={currentTool === 'ruler'} onClick={() => setTool('ruler')} icon={<Ruler size={20} />} label="Ruler Guide" />
+        <ToolBtn active={currentTool === 'capture'} onClick={() => setTool('capture')} icon={<Maximize size={20} />} label="Capture Brush Tip" />
+        <ToolBtn active={currentTool === 'line'} onClick={() => setTool('line')} icon={<Compass size={20} />} label="Line Tool" />
+        <ToolBtn active={currentTool === 'eraser'} onClick={() => setTool('eraser')} icon={<Eraser size={20} />} label="Eraser" />
+        <div className="h-6 md:h-px w-px md:w-8 bg-white/10 mx-1 md:my-1" />
+        <ToolBtn active={showPresets} onClick={() => setShowPresets(!showPresets)} icon={<Bookmark size={20} />} label="Brush Presets" />
+        <ToolBtn active={false} onClick={onOpenCreator} icon={<Wand2 size={20} />} label="Brush Architect" />
       </div>
       
-      <div className="mt-auto flex flex-col gap-2 md:gap-3 py-2 md:py-4 items-center">
-        <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg border border-white/10 shadow-lg relative overflow-hidden flex items-center justify-center group" style={{ backgroundColor: color }}>
+      <div className="ml-auto md:mt-auto flex flex-row md:flex-col gap-3 md:gap-3 py-1 md:py-4 items-center pr-2 md:pr-0">
+        <div className="w-9 h-9 md:w-8 md:h-8 rounded-lg border border-white/20 shadow-lg relative overflow-hidden flex items-center justify-center group" style={{ backgroundColor: color }}>
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer scale-150" />
         </div>
-        <ToolBtn onClick={onClear} icon={<Trash2 size={18} className="text-red-500/50" />} label="Clear Layer" />
+        <ToolBtn onClick={onClear} icon={<Trash2 size={20} className="text-red-500/70" />} label="Clear Layer" />
       </div>
 
       {showPresets && (
@@ -261,7 +261,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
 };
 
 const ToolBtn = ({ active = false, onClick, icon, label }: any) => (
-  <button onClick={onClick} title={label} className={`w-8 h-8 md:w-9 md:h-9 flex-shrink-0 flex items-center justify-center rounded-lg transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}> {icon} </button>
+  <button onClick={onClick} title={label} className={`w-11 h-11 md:w-9 md:h-9 flex-shrink-0 flex items-center justify-center rounded-lg transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}> {icon} </button>
 );
 
 export default Toolbar;

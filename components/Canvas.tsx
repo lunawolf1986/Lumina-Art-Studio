@@ -17,6 +17,8 @@ interface CanvasProps {
   onCapture?: (dataUrl: string) => void;
   transformState: TransformState;
   onTransformChange: (state: TransformState) => void;
+  isAdjustingSize?: boolean;
+  showSizeIndicator?: boolean;
 }
 
 export interface CanvasHandle {
@@ -27,7 +29,7 @@ export interface CanvasHandle {
   getLayersData: () => Promise<{ name: string; url: string }[]>;
 }
 
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, layers, activeLayerId, history, onActionComplete, width, height, backgroundColor, gridSettings, onCapture, transformState, onTransformChange }, ref) => {
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, layers, activeLayerId, history, onActionComplete, width, height, backgroundColor, gridSettings, onCapture, transformState, onTransformChange, isAdjustingSize, showSizeIndicator }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1174,7 +1176,41 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ tool, color, settings, l
               )}
            </div>
         )}
+
+        {cursorPos && ['pen', 'brush', 'eraser', 'line', 'rect', 'circle', 'measure'].includes(tool) && (
+          <div 
+            className="absolute pointer-events-none z-[200] border border-white/40 rounded-full mix-blend-difference"
+            style={{
+              left: `${(cursorPos.x / width) * 100}%`,
+              top: `${(cursorPos.y / height) * 100}%`,
+              width: settings.size * zoom,
+              height: settings.size * zoom,
+              transform: 'translate(-50%, -50%)',
+              boxShadow: '0 0 0 1px rgba(0,0,0,0.2)'
+            }}
+          />
+        )}
+
+        {(isAdjustingSize || showSizeIndicator) && (
+          <div 
+            className="absolute pointer-events-none z-[300] border-2 border-white/60 rounded-full mix-blend-difference shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-all duration-75"
+            style={{
+              left: (width * zoom) / 2 - panOffset.x,
+              top: (height * zoom) / 2 - panOffset.y,
+              width: settings.size * zoom,
+              height: settings.size * zoom,
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        )}
       </div>
+
+      {(isAdjustingSize || showSizeIndicator) && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-12 md:translate-y-16 pointer-events-none z-[500] flex flex-col items-center gap-1 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-2xl border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-200">
+          <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{tool} Size</span>
+          <span className="text-3xl font-black text-[hsl(var(--h),var(--s),var(--l))]">{Math.round(settings.size)}<span className="text-sm ml-1 opacity-40">PX</span></span>
+        </div>
+      )}
     </div>
   );
 });
